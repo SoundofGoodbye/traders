@@ -20,3 +20,5 @@ uv run pytest
 - `docs/` — slice plan, architecture, glossary
 
 See `docs/slices.md` for the build order and `docs/architecture.md` for the agent shape.
+<!-- delegation test: 2026-05-19 -->
+<!-- delegation smoke test (bigger scope): 2026-05-19 -->
