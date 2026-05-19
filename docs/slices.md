@@ -1,0 +1,46 @@
+# Slices
+
+The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
+
+## Slice 0 — scaffold
+
+- `pyproject.toml`, `src/traders/`, `tests/`, `migrations/001_initial.sql`, baseline docs.
+- Smoke test (`tests/test_smoke.py`) passes under `uv run pytest`.
+- No agent logic.
+
+## Slice 1 — Scout
+
+- Hardcoded watchlist loaded from a JSON file: S&P 100 + EuroStoxx 50 tickers.
+- Scout agent filters the watchlist into a small candidate set per run; writes to `candidates`.
+- Deterministic at this stage — heuristics, not LLM.
+
+## Slice 2 — Researcher
+
+- Per-candidate deep dive. Writes a structured note to `research_notes` (free-form `content` plus a `sources` field).
+- First slice that calls out to external data (filings, recent news). Sources tracked.
+
+## Slice 3 — Analyst
+
+- Produces theses with `thesis_type` (value / catalyst / momentum / mean-reversion), `direction`, `conviction` (1–5), `suggested_size_pct`, `exit_condition`, `rationale`.
+- One row per thesis in `theses`. Open status by default.
+
+## Slice 4 — Portfolio Manager
+
+- Final filter over the day's theses. Concentration / correlation check against open `positions`.
+- Generates a daily report (rendering deferred to slice 7+).
+
+## Slice 5 — Reviewer (weekly)
+
+- Walks closed positions, writes `post_mortems` with outcome and lessons.
+- Lessons feed into prompts for Analyst/Researcher in later iterations.
+
+## Slice 6 — Feedback loop
+
+- User reports fills, partials, skips, sells back through a small CLI / API surface.
+- `feedback` rows flow into `positions` updates.
+
+## Slice 7+
+
+- Real data sources (yfinance, FMP, Polygon, etc.).
+- Report rendering (markdown / HTML).
+- Scheduling (cron-ish runner for daily post-close + weekly review).
