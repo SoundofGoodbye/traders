@@ -1,0 +1,24 @@
+{
+  "sp100": [
+    "AAPL", "ABBV", "ABT", "ACN", "ADBE", "AIG", "AMD", "AMGN", "AMT", "AMZN",
+    "AVGO", "AXP", "BA", "BAC", "BK", "BKNG", "BLK", "BMY", "BRK-B", "C",
+    "CAT", "CHTR", "CL", "CMCSA", "COF", "COP", "COST", "CRM", "CSCO", "CVS",
+    "CVX", "DE", "DHR", "DIS", "DUK", "EXC", "FDX", "GD", "GE", "GILD",
+    "GM", "GOOG", "GOOGL", "GS", "HD", "HON", "IBM", "INTC", "INTU", "ISRG",
+    "JNJ", "JPM", "KO", "LIN", "LLY", "LMT", "LOW", "MA", "MCD", "MDLZ",
+    "MDT", "MET", "META", "MMM", "MO", "MRK", "MS", "MSFT", "NEE", "NFLX",
+    "NKE", "NVDA", "ORCL", "PEP", "PFE", "PG", "PM", "PYPL", "QCOM", "RTX",
+    "SBUX", "SCHW", "SO", "SPG", "T", "TGT", "TMO", "TMUS", "TSLA", "TXN",
+    "UNH", "UNP", "UPS", "USB", "V", "VZ", "WBA", "WFC", "WMT", "XOM"
+  ],
+  "eurostoxx50": [
+    "ADS.DE", "ADYEN.AS", "AD.AS", "AIR.PA", "AI.PA", "ALV.DE", "ABI.BR",
+    "ASML.AS", "BAS.DE", "BAYN.DE", "BBVA.MC", "BMW.DE", "BNP.PA", "CS.PA",
+    "DB1.DE", "DG.PA", "DHL.DE", "DTE.DE", "ENEL.MI", "ENI.MI", "EL.PA",
+    "FLTR.IR", "G.MI", "IBE.MC", "IFX.DE", "INGA.AS", "ISP.MI", "ITX.MC",
+    "KER.PA", "MBG.DE", "MC.PA", "MUV2.DE", "NDA-FI.HE", "NOKIA.HE", "OR.PA",
+    "PRX.AS", "RACE.MI", "RI.PA", "RMS.PA", "SAF.PA", "SAN.MC", "SAN.PA",
+    "SAP.DE", "SIE.DE", "STLAM.MI", "SU.PA", "TTE.PA", "UCG.MI", "VNA.DE",
+    "VOW3.DE"
+  ]
+}
