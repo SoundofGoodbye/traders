@@ -24,3 +24,26 @@ def test_cli_research_no_scout_runs(tmp_path, capsys):
     main(["research", "--db", str(db)])
     out = capsys.readouterr().out
     assert "0 note" in out
+
+
+def test_cli_scout_research_analyse(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "2"])
+    main(["research", "--db", str(db)])
+    capsys.readouterr()
+    main(["analyse", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "analyst run" in out
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM theses").fetchone()[0]
+    conn.close()
+    assert n == 2
+
+
+def test_cli_analyse_no_research_runs(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    main(["analyse", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "0 thesis" in out

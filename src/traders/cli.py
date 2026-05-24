@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from traders import __version__
+from traders.analyst import run as analyst_run
 from traders.db import apply_migrations, connect
 from traders.research import run as research_run
 from traders.scout import run as scout_run
@@ -32,6 +33,15 @@ def main(argv: list[str] | None = None) -> None:
         help="Scout run to research (defaults to latest)",
     )
 
+    analyse = sub.add_parser("analyse", help="Run the Analyst agent")
+    analyse.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    analyse.add_argument(
+        "--research-run-id",
+        type=int,
+        default=None,
+        help="Research run to analyse (defaults to latest)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.cmd == "scout":
@@ -53,6 +63,14 @@ def main(argv: list[str] | None = None) -> None:
         print(f"research run {run_id}: {len(tickers)} note(s)")
         for t in tickers:
             print(f"  {t}")
+        conn.close()
+        return
+
+    if args.cmd == "analyse":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        run_id, n_theses = analyst_run(conn, research_run_id=args.research_run_id)
+        print(f"analyst run {run_id}: {n_theses} thesis(es)")
         conn.close()
         return
 
