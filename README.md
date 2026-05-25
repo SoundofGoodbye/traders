@@ -24,10 +24,22 @@ uv run traders review     # Reviewer → post_mortems  (weekly)
 
 Each subcommand takes `--db PATH` and (where applicable) a `--*-run-id` flag to target a specific upstream run instead of the latest.
 
+### Feedback
+
+After the PM emits the daily report, the user executes manually and reports back:
+
+```bash
+uv run traders feedback fill    --thesis-id N --price P [--size-pct S] [--notes "..."]
+uv run traders feedback partial --thesis-id N --price P --size-pct S    [--notes "..."]
+uv run traders feedback skip    --thesis-id N                            [--notes "..."]
+uv run traders feedback sell    (--position-id N | --thesis-id N) --price P [--notes "..."]
+```
+
+`fill` / `partial` open a position; `sell` closes one; `skip` is a log-only record that the user declined the suggestion. Each event also writes a row to `feedback` carrying the price, size, and the position it opened or closed.
+
 ## Current limitations
 
 - **Stub generators in place of LLMs.** `StubThesisGenerator`, `StubPostMortemGenerator`, and `StubDataSource` ship today. The `ThesisGenerator` / `PostMortemGenerator` / `DataSource` protocols are stable; real model- and API-backed implementations drop in behind them in later slices.
-- **No feedback CLI yet (slice 6).** `positions` and `feedback` tables exist, but nothing writes to them from the CLI. To exercise Reviewer end-to-end you currently have to insert closed `positions` rows by hand.
 - **Scout heuristic is a date rotation**, not a data-driven filter. Real signals arrive once a real data source lands (slice 7+).
 - **No report rendering and no scheduler.** PM emits its summary to stdout; daily/weekly orchestration is still manual.
 
@@ -40,7 +52,7 @@ uv run pytest
 
 ## Layout
 
-- `src/traders/` — package source (one module per agent plus `db`, `cli`, `signals`, `data_sources`, `post_mortems`)
+- `src/traders/` — package source (one module per agent plus `db`, `cli`, `signals`, `data_sources`, `post_mortems`, `feedback`)
 - `tests/` — pytest suite
 - `migrations/` — SQLite schema migrations, applied in order; append-only
 - `data/` — local SQLite db (gitignored)

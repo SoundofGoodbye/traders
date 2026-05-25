@@ -8,6 +8,13 @@ from pathlib import Path
 from traders import __version__
 from traders.analyst import run as analyst_run
 from traders.db import apply_migrations, connect
+from traders.feedback import (
+    FeedbackError,
+    record_fill,
+    record_partial,
+    record_sell,
+    record_skip,
+)
 from traders.portfolio import run as pm_run
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
@@ -61,6 +68,36 @@ def main(argv: list[str] | None = None) -> None:
 
     review = sub.add_parser("review", help="Run the Reviewer (weekly)")
     review.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+
+    feedback = sub.add_parser("feedback", help="Report execution feedback")
+    fb_sub = feedback.add_subparsers(dest="action", required=True)
+
+    fb_fill = fb_sub.add_parser("fill", help="Full fill at the suggested size")
+    fb_fill.add_argument("--db", type=Path, default=None)
+    fb_fill.add_argument("--thesis-id", type=int, required=True)
+    fb_fill.add_argument("--price", type=float, required=True)
+    fb_fill.add_argument("--size-pct", type=float, default=None)
+    fb_fill.add_argument("--notes", type=str, default=None)
+
+    fb_partial = fb_sub.add_parser("partial", help="Partial fill at a smaller size")
+    fb_partial.add_argument("--db", type=Path, default=None)
+    fb_partial.add_argument("--thesis-id", type=int, required=True)
+    fb_partial.add_argument("--price", type=float, required=True)
+    fb_partial.add_argument("--size-pct", type=float, required=True)
+    fb_partial.add_argument("--notes", type=str, default=None)
+
+    fb_skip = fb_sub.add_parser("skip", help="Declined suggested thesis (log only)")
+    fb_skip.add_argument("--db", type=Path, default=None)
+    fb_skip.add_argument("--thesis-id", type=int, required=True)
+    fb_skip.add_argument("--notes", type=str, default=None)
+
+    fb_sell = fb_sub.add_parser("sell", help="Close an open position")
+    fb_sell.add_argument("--db", type=Path, default=None)
+    fb_sell.add_argument("--price", type=float, required=True)
+    fb_sell_target = fb_sell.add_mutually_exclusive_group(required=True)
+    fb_sell_target.add_argument("--position-id", type=int, default=None)
+    fb_sell_target.add_argument("--thesis-id", type=int, default=None)
+    fb_sell.add_argument("--notes", type=str, default=None)
 
     args = parser.parse_args(argv)
 
@@ -121,6 +158,65 @@ def main(argv: list[str] | None = None) -> None:
         apply_migrations(conn)
         run_id, n = reviewer_run(conn)
         print(f"reviewer run {run_id}: {n} post-mortem(s)")
+        conn.close()
+        return
+
+    if args.cmd == "feedback":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        try:
+            if args.action == "fill":
+                event = record_fill(
+                    conn,
+                    thesis_id=args.thesis_id,
+                    price=args.price,
+                    size_pct=args.size_pct,
+                    notes=args.notes,
+                )
+                print(
+                    f"fill recorded (feedback {event.feedback_id}): "
+                    f"opened position {event.position_id} "
+                    f"@ {event.price} size {event.size_pct:.1f}%"
+                )
+            elif args.action == "partial":
+                event = record_partial(
+                    conn,
+                    thesis_id=args.thesis_id,
+                    price=args.price,
+                    size_pct=args.size_pct,
+                    notes=args.notes,
+                )
+                print(
+                    f"partial recorded (feedback {event.feedback_id}): "
+                    f"opened position {event.position_id} "
+                    f"@ {event.price} size {event.size_pct:.1f}%"
+                )
+            elif args.action == "skip":
+                event = record_skip(
+                    conn,
+                    thesis_id=args.thesis_id,
+                    notes=args.notes,
+                )
+                print(
+                    f"skip recorded (feedback {event.feedback_id}): "
+                    f"thesis {event.thesis_id}"
+                )
+            elif args.action == "sell":
+                event = record_sell(
+                    conn,
+                    price=args.price,
+                    position_id=args.position_id,
+                    thesis_id=args.thesis_id,
+                    notes=args.notes,
+                )
+                print(
+                    f"sell recorded (feedback {event.feedback_id}): "
+                    f"closed position {event.position_id} @ {event.price}"
+                )
+        except FeedbackError as e:
+            print(f"feedback error: {e}")
+            conn.close()
+            raise SystemExit(1) from e
         conn.close()
         return
 
