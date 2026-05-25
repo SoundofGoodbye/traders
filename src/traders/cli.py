@@ -15,6 +15,7 @@ from traders.feedback import (
     record_sell,
     record_skip,
 )
+from traders.orchestrator import run_daily, run_weekly
 from traders.portfolio import run as pm_run
 from traders.reports import (
     latest_reviewer_run_id,
@@ -103,6 +104,51 @@ def main(argv: list[str] | None = None) -> None:
         help="Output format (default: text)",
     )
     review.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered review to this path instead of stdout",
+    )
+
+    daily = sub.add_parser(
+        "run-daily",
+        help="Run Scout → Researcher → Analyst → Portfolio Manager in sequence",
+    )
+    daily.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    daily.add_argument(
+        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
+    )
+    daily.add_argument("--batch-size", type=int, default=10)
+    daily.add_argument(
+        "--max-total-size-pct",
+        type=float,
+        default=20.0,
+        help="Total exposure cap (%% of NAV)",
+    )
+    daily.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format for the PM report (default: text)",
+    )
+    daily.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered PM report to this path instead of stdout",
+    )
+
+    weekly = sub.add_parser("run-weekly", help="Run the weekly Reviewer")
+    weekly.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    weekly.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format for the review (default: text)",
+    )
+    weekly.add_argument(
         "--output",
         type=Path,
         default=None,
@@ -204,6 +250,70 @@ def main(argv: list[str] | None = None) -> None:
             _emit(render_weekly_review_markdown(items, target), args.output)
         else:
             print(f"reviewer run {run_id}: {n} post-mortem(s)")
+        conn.close()
+        return
+
+    if args.cmd == "run-daily":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        result = run_daily(
+            conn,
+            watchlist_path=args.watchlist,
+            batch_size=args.batch_size,
+            max_total_size_pct=args.max_total_size_pct,
+        )
+        # Markdown to stdout: keep it pipeable by suppressing step
+        # summaries. In every other case (text, or markdown→file)
+        # surface the per-step progress.
+        quiet = args.fmt == "markdown" and args.output is None
+        if not quiet:
+            print(
+                f"scout run {result.scout_run_id}: "
+                f"{len(result.scout_picks)} candidate(s)"
+            )
+            print(
+                f"research run {result.research_run_id}: "
+                f"{len(result.research_tickers)} note(s)"
+            )
+            print(
+                f"analyst run {result.analyst_run_id}: "
+                f"{result.analyst_thesis_count} thesis(es)"
+            )
+        report = result.report
+        if args.fmt == "markdown":
+            _emit(render_daily_report_markdown(report), args.output)
+        else:
+            print(
+                f"pm run {report.pm_run_id}: "
+                f"{len(report.accepted)} accepted, {len(report.rejected)} rejected"
+            )
+            for item in report.accepted:
+                print(
+                    f"  accepted: {item.ticker} ({item.thesis_type}, "
+                    f"conv {item.conviction}, size {item.suggested_size_pct:.1f}%)"
+                )
+            for item in report.rejected:
+                print(f"  rejected: {item.ticker} — {item.reason}")
+        conn.close()
+        return
+
+    if args.cmd == "run-weekly":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        result = run_weekly(conn)
+        if args.fmt == "markdown":
+            target = (
+                result.reviewer_run_id
+                if result.reviewer_run_id
+                else latest_reviewer_run_id(conn)
+            )
+            items = load_review_for_run(conn, target) if target else []
+            _emit(render_weekly_review_markdown(items, target), args.output)
+        else:
+            print(
+                f"reviewer run {result.reviewer_run_id}: "
+                f"{result.post_mortems_written} post-mortem(s)"
+            )
         conn.close()
         return
 

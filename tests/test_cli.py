@@ -334,6 +334,130 @@ def test_cli_review_markdown_to_output_file(tmp_path, capsys):
     assert "AAA" in content
 
 
+def test_cli_run_daily_chains_to_pm_report(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    main(
+        [
+            "run-daily",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--batch-size",
+            "2",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "scout run 1" in out
+    assert "research run 1" in out
+    assert "analyst run 1" in out
+    assert "pm run 1" in out
+    assert "accepted" in out
+    assert "rejected" in out
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM pm_decisions").fetchone()[0] == 2
+    conn.close()
+
+
+def test_cli_run_daily_markdown_pipes_clean(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(
+        [
+            "run-daily",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--batch-size",
+            "1",
+            "--format",
+            "markdown",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert out.startswith("# Daily Report")
+    assert "scout run" not in out
+    assert "research run" not in out
+    assert "analyst run" not in out
+    assert "pm run 1" not in out
+
+
+def test_cli_run_daily_markdown_to_output_keeps_progress(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    target = tmp_path / "out" / "daily.md"
+    main(
+        [
+            "run-daily",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--batch-size",
+            "1",
+            "--format",
+            "markdown",
+            "--output",
+            str(target),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "scout run 1" in out
+    assert "wrote" in out
+    assert target.exists()
+    content = target.read_text()
+    assert content.startswith("# Daily Report")
+
+
+def test_cli_run_weekly_no_positions(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    main(["run-weekly", "--db", str(db_path)])
+    out = capsys.readouterr().out
+    assert "reviewer run 0" in out
+    assert "0 post-mortem" in out
+
+
+def test_cli_run_weekly_with_closed_position(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(
+        [
+            "run-daily",
+            "--db",
+            str(db_path),
+            "--watchlist",
+            str(wl),
+            "--batch-size",
+            "1",
+        ]
+    )
+    conn = sqlite3.connect(db_path)
+    thesis_id = conn.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    conn.execute(
+        "INSERT INTO positions"
+        " (ticker, thesis_id, opened_at, closed_at, entry_price, exit_price,"
+        " size_pct, status)"
+        " VALUES ('AAA', ?, '2026-05-01', '2026-05-20', 100.0, 120.0, 2.0,"
+        " 'closed')",
+        (thesis_id,),
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+
+    main(["run-weekly", "--db", str(db_path), "--format", "markdown"])
+    out = capsys.readouterr().out
+    assert out.startswith("# Weekly Review")
+    assert "AAA" in out
+    assert "PnL:" in out
+
+
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:

@@ -45,8 +45,13 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - `pm` and `review` gain `--format {text,markdown}` and `--output PATH` flags; default `text` preserves the legacy stdout summary.
 - Pure transformation layer (`traders.reports`); no schema changes, no new dependencies.
 
-## Slice 8+
+## Slice 8 — Orchestrator (cron-ready)
 
-- Real data sources (yfinance, FMP, Polygon, etc.).
-- Scheduling (cron-ish runner for daily post-close + weekly review).
+- `traders.orchestrator` chains Scout → Researcher → Analyst → PM behind one `run_daily(conn, ...)` call; Reviewer runs behind `run_weekly(conn)`. Fail-fast: any agent error propagates.
+- `run-daily` and `run-weekly` CLI subcommands; `--format {text,markdown}` and `--output PATH` mirror `pm`/`review`. Markdown to stdout suppresses per-step progress so it stays pipeable; markdown-to-file (or text) keeps progress visible.
+- No schema changes, no new dependencies — pure composition over the existing agents. Cron wiring is left to the operator.
+
+## Slice 9+
+
+- Real data sources (yfinance, FMP, Polygon, etc.) behind the existing `DataSource` protocol.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
