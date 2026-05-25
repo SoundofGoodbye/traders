@@ -16,16 +16,30 @@ from traders.feedback import (
     record_skip,
 )
 from traders.portfolio import run as pm_run
+from traders.reports import (
+    latest_reviewer_run_id,
+    load_review_for_run,
+    render_daily_report_markdown,
+    render_weekly_review_markdown,
+)
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
 from traders.scout import run as scout_run
 
 
+def _emit(text: str, output: Path | None) -> None:
+    """Write `text` to `output` (creating its parent dir) or to stdout."""
+    if output is None:
+        print(text, end="" if text.endswith("\n") else "\n")
+        return
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(text)
+    print(f"wrote {output}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="traders")
-    parser.add_argument(
-        "--version", action="version", version=f"traders v{__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"traders v{__version__}")
     sub = parser.add_subparsers(dest="cmd")
 
     scout = sub.add_parser("scout", help="Run the Scout agent")
@@ -65,9 +79,35 @@ def main(argv: list[str] | None = None) -> None:
         default=20.0,
         help="Total exposure cap (%% of NAV)",
     )
+    pm.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    pm.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered report to this path instead of stdout",
+    )
 
     review = sub.add_parser("review", help="Run the Reviewer (weekly)")
     review.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    review.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    review.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered review to this path instead of stdout",
+    )
 
     feedback = sub.add_parser("feedback", help="Report execution feedback")
     fb_sub = feedback.add_subparsers(dest="action", required=True)
@@ -104,9 +144,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "scout":
         conn = connect(args.db)
         apply_migrations(conn)
-        run_id, picks = scout_run(
-            conn, watchlist_path=args.watchlist, batch_size=args.batch_size
-        )
+        run_id, picks = scout_run(conn, watchlist_path=args.watchlist, batch_size=args.batch_size)
         print(f"scout run {run_id}: {len(picks)} candidate(s)")
         for t in picks:
             print(f"  {t}")
@@ -139,17 +177,20 @@ def main(argv: list[str] | None = None) -> None:
             analyst_run_id=args.analyst_run_id,
             max_total_size_pct=args.max_total_size_pct,
         )
-        print(
-            f"pm run {report.pm_run_id}: "
-            f"{len(report.accepted)} accepted, {len(report.rejected)} rejected"
-        )
-        for item in report.accepted:
+        if args.fmt == "markdown":
+            _emit(render_daily_report_markdown(report), args.output)
+        else:
             print(
-                f"  accepted: {item.ticker} ({item.thesis_type}, "
-                f"conv {item.conviction}, size {item.suggested_size_pct:.1f}%)"
+                f"pm run {report.pm_run_id}: "
+                f"{len(report.accepted)} accepted, {len(report.rejected)} rejected"
             )
-        for item in report.rejected:
-            print(f"  rejected: {item.ticker} — {item.reason}")
+            for item in report.accepted:
+                print(
+                    f"  accepted: {item.ticker} ({item.thesis_type}, "
+                    f"conv {item.conviction}, size {item.suggested_size_pct:.1f}%)"
+                )
+            for item in report.rejected:
+                print(f"  rejected: {item.ticker} — {item.reason}")
         conn.close()
         return
 
@@ -157,7 +198,12 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         run_id, n = reviewer_run(conn)
-        print(f"reviewer run {run_id}: {n} post-mortem(s)")
+        if args.fmt == "markdown":
+            target = run_id if run_id else latest_reviewer_run_id(conn)
+            items = load_review_for_run(conn, target) if target else []
+            _emit(render_weekly_review_markdown(items, target), args.output)
+        else:
+            print(f"reviewer run {run_id}: {n} post-mortem(s)")
         conn.close()
         return
 
@@ -197,10 +243,7 @@ def main(argv: list[str] | None = None) -> None:
                     thesis_id=args.thesis_id,
                     notes=args.notes,
                 )
-                print(
-                    f"skip recorded (feedback {event.feedback_id}): "
-                    f"thesis {event.thesis_id}"
-                )
+                print(f"skip recorded (feedback {event.feedback_id}): thesis {event.thesis_id}")
             elif args.action == "sell":
                 event = record_sell(
                     conn,

@@ -4,7 +4,7 @@ Reads theses from the latest Analyst run (or a specified run), checks them
 against open positions for concentration / correlation, and emits a daily
 report describing which theses were accepted (forwarded to the user) and
 which were rejected (and why). Per-thesis decisions are persisted to
-`pm_decisions`. Report rendering (markdown / HTML) is deferred to slice 7+.
+`pm_decisions`. Markdown rendering lives in `traders.reports`.
 """
 
 from __future__ import annotations

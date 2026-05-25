@@ -27,7 +27,7 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 ## Slice 4 — Portfolio Manager
 
 - Final filter over the day's theses. Concentration / correlation check against open `positions`.
-- Generates a daily report (rendering deferred to slice 7+).
+- Generates a daily report (rendering shipped in slice 7).
 
 ## Slice 5 — Reviewer (weekly)
 
@@ -39,8 +39,14 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - User reports fills, partials, skips, sells back through a small CLI / API surface.
 - `feedback` rows flow into `positions` updates.
 
-## Slice 7+
+## Slice 7 — Report rendering
+
+- Markdown renderers for the PM's daily report and the Reviewer's weekly run.
+- `pm` and `review` gain `--format {text,markdown}` and `--output PATH` flags; default `text` preserves the legacy stdout summary.
+- Pure transformation layer (`traders.reports`); no schema changes, no new dependencies.
+
+## Slice 8+
 
 - Real data sources (yfinance, FMP, Polygon, etc.).
-- Report rendering (markdown / HTML).
 - Scheduling (cron-ish runner for daily post-close + weekly review).
+- HTML rendering on top of the slice 7 markdown surface, if/when wanted.

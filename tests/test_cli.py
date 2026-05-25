@@ -211,6 +211,129 @@ def test_cli_feedback_skip(tmp_path, capsys):
     assert action == "skip"
 
 
+def test_cli_pm_markdown_to_stdout(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "2"])
+    main(["research", "--db", str(db)])
+    main(["analyse", "--db", str(db)])
+    capsys.readouterr()
+    main(["pm", "--db", str(db), "--format", "markdown"])
+    out = capsys.readouterr().out
+    assert out.startswith("# Daily Report")
+    assert "## Accepted" in out
+    assert "## Rejected" in out
+    assert "AAA" in out
+    assert "pm run" not in out
+
+
+def test_cli_pm_markdown_to_output_file(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    main(["analyse", "--db", str(db)])
+    capsys.readouterr()
+    target = tmp_path / "out" / "report.md"
+    main(
+        ["pm", "--db", str(db), "--format", "markdown", "--output", str(target)]
+    )
+    assert target.exists()
+    content = target.read_text()
+    assert content.startswith("# Daily Report")
+    out = capsys.readouterr().out
+    assert "wrote" in out
+    assert str(target) in out
+
+
+def test_cli_pm_text_default_unchanged(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    main(["analyse", "--db", str(db)])
+    capsys.readouterr()
+    main(["pm", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "pm run" in out
+    assert "# Daily Report" not in out
+
+
+def test_cli_review_markdown_to_stdout(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db_path), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db_path)])
+    main(["analyse", "--db", str(db_path)])
+    conn = sqlite3.connect(db_path)
+    thesis_id = conn.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    conn.execute(
+        "INSERT INTO positions"
+        " (ticker, thesis_id, opened_at, closed_at, entry_price, exit_price,"
+        " size_pct, status)"
+        " VALUES ('AAA', ?, '2026-05-01', '2026-05-20', 100.0, 120.0, 2.0, 'closed')",
+        (thesis_id,),
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+    main(["review", "--db", str(db_path), "--format", "markdown"])
+    out = capsys.readouterr().out
+    assert out.startswith("# Weekly Review")
+    assert "AAA" in out
+    assert "PnL:" in out
+    assert "post-mortem(s)" not in out
+
+
+def test_cli_review_markdown_no_post_mortems_renders_placeholder(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    main(["review", "--db", str(db_path), "--format", "markdown"])
+    out = capsys.readouterr().out
+    assert "# Weekly Review" in out
+    assert "No post-mortems" in out
+
+
+def test_cli_review_markdown_to_output_file(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db_path), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db_path)])
+    main(["analyse", "--db", str(db_path)])
+    conn = sqlite3.connect(db_path)
+    thesis_id = conn.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    conn.execute(
+        "INSERT INTO positions"
+        " (ticker, thesis_id, opened_at, closed_at, entry_price, exit_price,"
+        " size_pct, status)"
+        " VALUES ('AAA', ?, '2026-05-01', '2026-05-20', 100.0, 120.0, 2.0, 'closed')",
+        (thesis_id,),
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+    target = tmp_path / "out" / "review.md"
+    main(
+        [
+            "review",
+            "--db",
+            str(db_path),
+            "--format",
+            "markdown",
+            "--output",
+            str(target),
+        ]
+    )
+    assert target.exists()
+    content = target.read_text()
+    assert content.startswith("# Weekly Review")
+    assert "AAA" in content
+
+
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:
