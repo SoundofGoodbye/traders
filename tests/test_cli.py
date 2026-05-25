@@ -73,3 +73,40 @@ def test_cli_pm_no_analyst_runs(tmp_path, capsys):
     main(["pm", "--db", str(db)])
     out = capsys.readouterr().out
     assert "0 accepted" in out
+
+
+def test_cli_review_full_pipeline(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db_path), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db_path)])
+    main(["analyse", "--db", str(db_path)])
+    main(["pm", "--db", str(db_path)])
+    conn = sqlite3.connect(db_path)
+    thesis_id = conn.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    conn.execute(
+        "INSERT INTO positions"
+        " (ticker, thesis_id, opened_at, closed_at, entry_price, exit_price,"
+        " size_pct, status)"
+        " VALUES ('AAA', ?, '2026-05-01', '2026-05-20', 100.0, 120.0, 2.0, 'closed')",
+        (thesis_id,),
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+    main(["review", "--db", str(db_path)])
+    out = capsys.readouterr().out
+    assert "reviewer run" in out
+    assert "1 post-mortem" in out
+    conn = sqlite3.connect(db_path)
+    n = conn.execute("SELECT COUNT(*) FROM post_mortems").fetchone()[0]
+    conn.close()
+    assert n == 1
+
+
+def test_cli_review_no_positions(tmp_path, capsys):
+    db_path = tmp_path / "t.db"
+    main(["review", "--db", str(db_path)])
+    out = capsys.readouterr().out
+    assert "0 post-mortem" in out

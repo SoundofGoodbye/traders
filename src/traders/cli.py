@@ -10,6 +10,7 @@ from traders.analyst import run as analyst_run
 from traders.db import apply_migrations, connect
 from traders.portfolio import run as pm_run
 from traders.research import run as research_run
+from traders.reviewer import run as reviewer_run
 from traders.scout import run as scout_run
 
 
@@ -55,8 +56,11 @@ def main(argv: list[str] | None = None) -> None:
         "--max-total-size-pct",
         type=float,
         default=20.0,
-        help="Total exposure cap (% of NAV)",
+        help="Total exposure cap (%% of NAV)",
     )
+
+    review = sub.add_parser("review", help="Run the Reviewer (weekly)")
+    review.add_argument("--db", type=Path, default=None, help="SQLite DB path")
 
     args = parser.parse_args(argv)
 
@@ -109,6 +113,14 @@ def main(argv: list[str] | None = None) -> None:
             )
         for item in report.rejected:
             print(f"  rejected: {item.ticker} — {item.reason}")
+        conn.close()
+        return
+
+    if args.cmd == "review":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        run_id, n = reviewer_run(conn)
+        print(f"reviewer run {run_id}: {n} post-mortem(s)")
         conn.close()
         return
 
