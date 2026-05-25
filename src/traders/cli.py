@@ -7,6 +7,7 @@ from pathlib import Path
 
 from traders import __version__
 from traders.analyst import run as analyst_run
+from traders.data_sources import make_data_source
 from traders.db import apply_migrations, connect
 from traders.feedback import (
     FeedbackError,
@@ -55,6 +56,13 @@ def main(argv: list[str] | None = None) -> None:
         type=int,
         default=None,
         help="Scout run to research (defaults to latest)",
+    )
+    research.add_argument(
+        "--data-source",
+        dest="data_source",
+        choices=("stub", "yfinance"),
+        default="stub",
+        help="Evidence source for the Researcher (default: stub)",
     )
 
     analyse = sub.add_parser("analyse", help="Run the Analyst agent")
@@ -124,6 +132,13 @@ def main(argv: list[str] | None = None) -> None:
         type=float,
         default=20.0,
         help="Total exposure cap (%% of NAV)",
+    )
+    daily.add_argument(
+        "--data-source",
+        dest="data_source",
+        choices=("stub", "yfinance"),
+        default="stub",
+        help="Evidence source for the Researcher step (default: stub)",
     )
     daily.add_argument(
         "--format",
@@ -200,8 +215,14 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "research":
         conn = connect(args.db)
         apply_migrations(conn)
-        run_id, tickers = research_run(conn, scout_run_id=args.scout_run_id)
-        print(f"research run {run_id}: {len(tickers)} note(s)")
+        ds = make_data_source(args.data_source)
+        run_id, tickers = research_run(
+            conn, data_source=ds, scout_run_id=args.scout_run_id
+        )
+        print(
+            f"research run {run_id}: {len(tickers)} note(s) "
+            f"(source: {args.data_source})"
+        )
         for t in tickers:
             print(f"  {t}")
         conn.close()
@@ -256,11 +277,13 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "run-daily":
         conn = connect(args.db)
         apply_migrations(conn)
+        ds = make_data_source(args.data_source)
         result = run_daily(
             conn,
             watchlist_path=args.watchlist,
             batch_size=args.batch_size,
             max_total_size_pct=args.max_total_size_pct,
+            data_source=ds,
         )
         # Markdown to stdout: keep it pipeable by suppressing step
         # summaries. In every other case (text, or markdown→file)
@@ -273,7 +296,8 @@ def main(argv: list[str] | None = None) -> None:
             )
             print(
                 f"research run {result.research_run_id}: "
-                f"{len(result.research_tickers)} note(s)"
+                f"{len(result.research_tickers)} note(s) "
+                f"(source: {args.data_source})"
             )
             print(
                 f"analyst run {result.analyst_run_id}: "

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from traders.analyst import run as analyst_run
+from traders.data_sources import DataSource
 from traders.portfolio import DEFAULT_MAX_TOTAL_SIZE_PCT, DailyReport
 from traders.portfolio import run as pm_run
 from traders.research import run as research_run
@@ -52,12 +53,15 @@ def run_daily(
     watchlist_path: Path | None = None,
     batch_size: int = DEFAULT_BATCH_SIZE,
     max_total_size_pct: float = DEFAULT_MAX_TOTAL_SIZE_PCT,
+    data_source: DataSource | None = None,
 ) -> DailyRunResult:
     """Run Scout → Researcher → Analyst → Portfolio Manager against `conn`."""
     scout_id, picks = scout_run(
         conn, watchlist_path=watchlist_path, batch_size=batch_size
     )
-    research_id, tickers = research_run(conn, scout_run_id=scout_id)
+    research_id, tickers = research_run(
+        conn, data_source=data_source, scout_run_id=scout_id
+    )
     analyst_id, n_theses = analyst_run(conn, research_run_id=research_id)
     report = pm_run(
         conn,

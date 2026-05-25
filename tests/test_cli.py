@@ -458,6 +458,55 @@ def test_cli_run_weekly_with_closed_position(tmp_path, capsys):
     assert "PnL:" in out
 
 
+def test_cli_research_data_source_flag_defaults_to_stub(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    capsys.readouterr()
+    main(["research", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "(source: stub)" in out
+
+
+def test_cli_research_explicit_stub_data_source(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    capsys.readouterr()
+    main(["research", "--db", str(db), "--data-source", "stub"])
+    out = capsys.readouterr().out
+    assert "(source: stub)" in out
+
+
+def test_cli_research_rejects_unknown_data_source(tmp_path):
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit):
+        main(["research", "--db", str(db), "--data-source", "polygon"])
+
+
+def test_cli_run_daily_logs_data_source(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(
+        [
+            "run-daily",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--batch-size",
+            "1",
+            "--data-source",
+            "stub",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "(source: stub)" in out
+
+
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:

@@ -3,6 +3,7 @@ import sqlite3
 
 import pytest
 
+from traders.data_sources import DataPoint
 from traders.db import apply_migrations, connect
 from traders.orchestrator import run_daily, run_weekly
 
@@ -55,6 +56,46 @@ def test_run_daily_increments_run_ids_across_calls(tmp_path):
     assert second.analyst_run_id == 2
     assert second.report.pm_run_id == 2
     assert second.report.analyst_run_id == 2
+
+
+def test_run_daily_threads_custom_data_source(tmp_path):
+    """`run_daily(data_source=...)` reaches the Researcher step."""
+
+    class RecordingDataSource:
+        def __init__(self):
+            self.calls = []
+
+        def fetch(self, ticker):
+            self.calls.append(ticker)
+            return [
+                DataPoint(
+                    kind="news",
+                    title=f"{ticker} headline",
+                    url=f"https://example.com/{ticker}",
+                    snippet="snip",
+                    published_at="2026-05-20",
+                )
+            ]
+
+    db = tmp_path / "t.db"
+    wl = _watchlist(tmp_path)
+    conn = connect(db)
+    apply_migrations(conn)
+    recorder = RecordingDataSource()
+    result = run_daily(conn, watchlist_path=wl, batch_size=2, data_source=recorder)
+    conn.close()
+
+    assert sorted(recorder.calls) == ["AAA", "BBB"]
+    assert sorted(result.research_tickers) == ["AAA", "BBB"]
+
+    conn = sqlite3.connect(db)
+    sources = conn.execute("SELECT sources FROM research_notes").fetchall()
+    conn.close()
+    # Sources must reflect the injected data source (https://example.com/...),
+    # not the stub's stub:// URLs.
+    for (raw,) in sources:
+        parsed = json.loads(raw)
+        assert any(item["url"].startswith("https://example.com") for item in parsed)
 
 
 def test_run_daily_propagates_agent_errors(tmp_path):

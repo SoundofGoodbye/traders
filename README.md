@@ -24,7 +24,7 @@ uv run traders run-daily   # Scout → Researcher → Analyst → PM in one shot
 uv run traders run-weekly  # Reviewer in one shot
 ```
 
-Each subcommand takes `--db PATH` and (where applicable) a `--*-run-id` flag to target a specific upstream run instead of the latest. `pm`, `review`, `run-daily`, and `run-weekly` additionally take `--format {text,markdown}` (default `text`) and `--output PATH` to write the rendered document to a file instead of stdout:
+Each subcommand takes `--db PATH` and (where applicable) a `--*-run-id` flag to target a specific upstream run instead of the latest. `research` and `run-daily` additionally take `--data-source {stub,yfinance}` (default `stub`); see [Data sources](#data-sources) below. `pm`, `review`, `run-daily`, and `run-weekly` additionally take `--format {text,markdown}` (default `text`) and `--output PATH` to write the rendered document to a file instead of stdout:
 
 ```bash
 uv run traders pm --format markdown                       # print daily report as markdown
@@ -48,11 +48,26 @@ uv run traders feedback sell    (--position-id N | --thesis-id N) --price P [--n
 
 `fill` / `partial` open a position; `sell` closes one; `skip` is a log-only record that the user declined the suggestion. Each event also writes a row to `feedback` carrying the price, size, and the position it opened or closed.
 
+## Data sources
+
+The Researcher reads evidence through a `DataSource` protocol; the default is `StubDataSource` (deterministic fixture data, no I/O). Slice 9 added an opt-in `YFinanceDataSource` that pulls news and fundamentals from Yahoo Finance:
+
+```bash
+uv sync --extra realdata                                # installs yfinance
+uv run traders research --data-source yfinance          # research using real data
+uv run traders run-daily --data-source yfinance         # full chain with real data
+```
+
+The default install does **not** include yfinance — keep the footprint empty unless you opt in. The CLI default is `--data-source stub` so existing behavior and the test suite stay hermetic.
+
+The adapter degrades gracefully: network errors, rate limits, or missing fields produce an empty list of data points rather than raising, so a single flaky ticker can't kill the run. Filings are not covered yet (yfinance doesn't serve them — a SEC EDGAR adapter is owned by slice 10+). There is no caching layer — once per close is well within yfinance's tolerances.
+
 ## Current limitations
 
-- **Stub generators in place of LLMs.** `StubThesisGenerator`, `StubPostMortemGenerator`, and `StubDataSource` ship today. The `ThesisGenerator` / `PostMortemGenerator` / `DataSource` protocols are stable; real model- and API-backed implementations drop in behind them in later slices.
-- **Scout heuristic is a date rotation**, not a data-driven filter. Real signals arrive once a real data source lands (slice 9+).
+- **Stub generators in place of LLMs.** `StubThesisGenerator` and `StubPostMortemGenerator` ship today. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; real model-backed implementations drop in behind them in later slices.
+- **Scout heuristic is a date rotation**, not a data-driven filter. Real signals will arrive once Scout is rewired to consume from a `DataSource` itself (a follow-up slice — Researcher is the first consumer today).
 - **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing (post-close daily, weekly review) is left to the operator — wire them to cron, systemd timers, or whatever the host runs.
+- **yfinance only, no caching.** Real data today comes from yfinance; FMP, Polygon, and EDGAR are slice 10+. No cross-run cache yet — if rate limits start to bite, that's the trigger to add one.
 
 ## Running
 

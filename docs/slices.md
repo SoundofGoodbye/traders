@@ -51,7 +51,17 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - `run-daily` and `run-weekly` CLI subcommands; `--format {text,markdown}` and `--output PATH` mirror `pm`/`review`. Markdown to stdout suppresses per-step progress so it stays pipeable; markdown-to-file (or text) keeps progress visible.
 - No schema changes, no new dependencies — pure composition over the existing agents. Cron wiring is left to the operator.
 
-## Slice 9+
+## Slice 9 — yfinance data source
 
-- Real data sources (yfinance, FMP, Polygon, etc.) behind the existing `DataSource` protocol.
+- First real `DataSource` implementation. yfinance is the low-friction pick: no API key, covers both the S&P 100 and EuroStoxx 50 tickers, and returns news + fundamentals which slot directly onto the existing `DataPoint` kinds.
+- Opt-in via `--data-source {stub,yfinance}` on `research` and `run-daily`; default stays `stub` so existing tests remain hermetic.
+- Optional install — `uv sync --extra realdata` pulls in yfinance; the default install footprint stays empty.
+- The adapter returns `[]` on any network or parse error (honoring the protocol contract that no data is not an exception), so a flaky ticker can't kill the run.
+- No caching, no retries, no rate-limit handling — operator runs `run-daily` once per close, which is well within yfinance's tolerances.
+- yfinance does not serve filings; `filing` kind is left empty pending a later EDGAR adapter.
+
+## Slice 10+
+
+- Additional data sources (FMP, Polygon, SEC EDGAR for filings) behind the same `DataSource` protocol.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
+- Cross-run data caching if rate limits start mattering.
