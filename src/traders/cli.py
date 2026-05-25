@@ -8,6 +8,7 @@ from pathlib import Path
 from traders import __version__
 from traders.analyst import run as analyst_run
 from traders.db import apply_migrations, connect
+from traders.portfolio import run as pm_run
 from traders.research import run as research_run
 from traders.scout import run as scout_run
 
@@ -42,6 +43,21 @@ def main(argv: list[str] | None = None) -> None:
         help="Research run to analyse (defaults to latest)",
     )
 
+    pm = sub.add_parser("pm", help="Run the Portfolio Manager")
+    pm.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    pm.add_argument(
+        "--analyst-run-id",
+        type=int,
+        default=None,
+        help="Analyst run to review (defaults to latest)",
+    )
+    pm.add_argument(
+        "--max-total-size-pct",
+        type=float,
+        default=20.0,
+        help="Total exposure cap (% of NAV)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.cmd == "scout":
@@ -71,6 +87,28 @@ def main(argv: list[str] | None = None) -> None:
         apply_migrations(conn)
         run_id, n_theses = analyst_run(conn, research_run_id=args.research_run_id)
         print(f"analyst run {run_id}: {n_theses} thesis(es)")
+        conn.close()
+        return
+
+    if args.cmd == "pm":
+        conn = connect(args.db)
+        apply_migrations(conn)
+        report = pm_run(
+            conn,
+            analyst_run_id=args.analyst_run_id,
+            max_total_size_pct=args.max_total_size_pct,
+        )
+        print(
+            f"pm run {report.pm_run_id}: "
+            f"{len(report.accepted)} accepted, {len(report.rejected)} rejected"
+        )
+        for item in report.accepted:
+            print(
+                f"  accepted: {item.ticker} ({item.thesis_type}, "
+                f"conv {item.conviction}, size {item.suggested_size_pct:.1f}%)"
+            )
+        for item in report.rejected:
+            print(f"  rejected: {item.ticker} — {item.reason}")
         conn.close()
         return
 
