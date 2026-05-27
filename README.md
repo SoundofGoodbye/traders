@@ -2,6 +2,14 @@
 
 Agent-driven stock research and advisory system. Daily cadence over an S&P 100 + EuroStoxx 50 watchlist, paper mode only — the system never places orders; the user executes manually and reports fills back through a feedback path. Built as plain Python modules sharing a SQLite database.
 
+## Status
+
+- **Scout** — shipped; date-seeded rotation over the watchlist.
+- **Researcher** — shipped; stub data source by default, opt-in yfinance adapter.
+- **Analyst** — shipped; stub thesis generator behind a stable protocol.
+- **Portfolio Manager** — shipped; persists accept/reject decisions and renders a daily report.
+- **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems.
+
 ## Agents
 
 - **Scout** — filters the watchlist down to a small daily candidate set. Deterministic date-seeded rotation today; data-driven later.
