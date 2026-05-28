@@ -2,6 +2,7 @@ import pytest
 
 from traders.data_sources import (
     DataPoint,
+    EdgarDataSource,
     StubDataSource,
     YFinanceDataSource,
     make_data_source,
@@ -230,3 +231,100 @@ def test_make_data_source_yfinance_requires_install():
 def test_make_data_source_unknown_raises():
     with pytest.raises(ValueError):
         make_data_source("polygon")
+
+
+# --- EdgarDataSource (network-free, dependency-injected) -------------------
+
+
+def _filings_fn_from(filings_map):
+    return lambda symbol: filings_map[symbol]
+
+
+def test_edgar_emits_filing_data_points():
+    filings = [
+        {
+            "form": "10-K",
+            "filingDate": "2026-01-15",
+            "accessionNumber": "0000320193-26-000001",
+            "primaryDocument": "aapl-20251228.htm",
+            "cik": "320193",
+        },
+        {
+            "form": "10-Q",
+            "filingDate": "2026-04-30",
+            "accessionNumber": "0000320193-26-000002",
+            "primaryDocument": "aapl-q1.htm",
+            "cik": "320193",
+        },
+    ]
+    ds = EdgarDataSource(filings_fn=_filings_fn_from({"AAPL": filings}))
+    points = ds.fetch("AAPL")
+    assert len(points) == 2
+    assert all(p.kind == "filing" for p in points)
+    assert points[0].title == "AAPL 10-K"
+    assert points[0].published_at == "2026-01-15"
+    assert "sec.gov" in points[0].url
+    assert "000032019326000001" in points[0].url
+
+
+def test_edgar_filters_unwanted_forms():
+    filings = [
+        {"form": "10-K", "filingDate": "2026-01-15", "accessionNumber": "a-1",
+         "primaryDocument": "x.htm", "cik": "1"},
+        {"form": "SC 13G", "filingDate": "2026-02-01", "accessionNumber": "a-2",
+         "primaryDocument": "y.htm", "cik": "1"},
+        {"form": "10-Q", "filingDate": "2026-04-30", "accessionNumber": "a-3",
+         "primaryDocument": "z.htm", "cik": "1"},
+    ]
+    ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}))
+    points = ds.fetch("X")
+    assert [p.title for p in points] == ["X 10-K", "X 10-Q"]
+
+
+def test_edgar_returns_empty_for_unknown_ticker():
+    ds = EdgarDataSource(filings_fn=lambda _s: [])
+    assert ds.fetch("ZZZZ") == []
+
+
+def test_edgar_swallows_fetcher_error():
+    def boom(_symbol):
+        raise RuntimeError("network down")
+
+    ds = EdgarDataSource(filings_fn=boom)
+    assert ds.fetch("AAPL") == []
+
+
+def test_edgar_respects_limit():
+    filings = [
+        {"form": "8-K", "filingDate": f"2026-04-{i:02d}",
+         "accessionNumber": f"a-{i}", "primaryDocument": f"d{i}.htm", "cik": "1"}
+        for i in range(1, 11)
+    ]
+    ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}), limit=3)
+    points = ds.fetch("X")
+    assert len(points) == 3
+
+
+def test_edgar_skips_non_dict_items():
+    filings = [
+        None,
+        "not a dict",
+        {"form": "10-K", "filingDate": "2026-01-15", "accessionNumber": "a-1",
+         "primaryDocument": "x.htm", "cik": "1"},
+    ]
+    ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}))
+    points = ds.fetch("X")
+    assert len(points) == 1
+    assert points[0].title == "X 10-K"
+
+
+def test_make_data_source_edgar_requires_env(monkeypatch):
+    """Without TRADERS_EDGAR_UA, the default fetcher must raise; with it
+    set, the factory returns an EdgarDataSource.
+    """
+    monkeypatch.delenv("TRADERS_EDGAR_UA", raising=False)
+    with pytest.raises(RuntimeError):
+        make_data_source("edgar")
+    monkeypatch.setenv("TRADERS_EDGAR_UA", "Test test@example.com")
+    ds = make_data_source("edgar")
+    assert isinstance(ds, EdgarDataSource)

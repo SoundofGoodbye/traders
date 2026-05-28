@@ -226,6 +226,158 @@ class YFinanceDataSource:
         )
 
 
+def _default_edgar_fetcher() -> Callable[[str], list[dict[str, Any]]]:
+    """Build the default EDGAR fetcher.
+
+    Hides the two-step SEC EDGAR shape (ticker -> CIK map, then per-CIK
+    submissions JSON) behind one `filings_fn(ticker) -> list[dict]`.
+    The CIK map is cached in closure state after the first call.
+
+    Hard-requires the `TRADERS_EDGAR_UA` env var: SEC blocks requests
+    without an identifying User-Agent (a real contact string like
+    "Acme Research user@acme.com"). Raises RuntimeError at construction
+    if unset - same shape as how yfinance raises when the package
+    isn't installed.
+    """
+    import json
+    import os
+    import urllib.request
+
+    ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
+    if not ua:
+        raise RuntimeError(
+            "TRADERS_EDGAR_UA env var is required for the EDGAR data source. "
+            "Set it to a real contact string (e.g. "
+            "'Acme Research user@acme.com')."
+        )
+
+    cik_map: dict[str, str] = {}
+
+    def _fetch_json(url: str) -> Any:
+        req = urllib.request.Request(url, headers={"User-Agent": ua})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.load(resp)
+
+    def _load_cik_map() -> dict[str, str]:
+        payload = _fetch_json("https://www.sec.gov/files/company_tickers.json")
+        out: dict[str, str] = {}
+        for entry in payload.values():
+            if not isinstance(entry, dict):
+                continue
+            t = entry.get("ticker")
+            c = entry.get("cik_str")
+            if t and c is not None:
+                out[str(t).upper()] = str(c).zfill(10)
+        return out
+
+    def fetch(ticker: str) -> list[dict[str, Any]]:
+        if not cik_map:
+            cik_map.update(_load_cik_map())
+        cik = cik_map.get(ticker.upper())
+        if cik is None:
+            return []
+        payload = _fetch_json(f"https://data.sec.gov/submissions/CIK{cik}.json")
+        recent = payload.get("filings", {}).get("recent", {})
+        forms = recent.get("form", [])
+        dates = recent.get("filingDate", [])
+        accessions = recent.get("accessionNumber", [])
+        docs = recent.get("primaryDocument", [])
+        out: list[dict[str, Any]] = []
+        for i, form in enumerate(forms):
+            out.append(
+                {
+                    "form": form,
+                    "filingDate": dates[i] if i < len(dates) else "",
+                    "accessionNumber": accessions[i] if i < len(accessions) else "",
+                    "primaryDocument": docs[i] if i < len(docs) else "",
+                    "cik": cik.lstrip("0") or "0",
+                }
+            )
+        return out
+
+    return fetch
+
+
+class EdgarDataSource:
+    """Real adapter backed by SEC EDGAR for ticker filings.
+
+    Emits one `kind="filing"` DataPoint per recent 10-K / 10-Q / 8-K
+    filing (forms and limit configurable). Network and parse errors
+    return an empty list so a flaky ticker can't kill the Researcher
+    run, matching the YFinanceDataSource contract.
+
+    The default fetcher hard-requires the `TRADERS_EDGAR_UA` env var
+    (a real contact string like "Acme Research user@acme.com") - SEC
+    blocks requests without an identifying User-Agent. Tests inject a
+    `filings_fn` to bypass the network entirely.
+    """
+
+    DEFAULT_FORMS: tuple[str, ...] = ("10-K", "10-Q", "8-K")
+    DEFAULT_LIMIT: int = 5
+
+    def __init__(
+        self,
+        filings_fn: Callable[[str], list[dict[str, Any]]] | None = None,
+        forms: tuple[str, ...] | None = None,
+        limit: int | None = None,
+    ) -> None:
+        if filings_fn is None:
+            filings_fn = _default_edgar_fetcher()
+        self._filings_fn = filings_fn
+        self._forms = tuple(forms) if forms is not None else self.DEFAULT_FORMS
+        self._limit = limit if limit is not None else self.DEFAULT_LIMIT
+
+    def fetch(self, ticker: str) -> list[DataPoint]:
+        try:
+            raw = self._filings_fn(ticker)
+        except Exception:
+            return []
+        if not raw:
+            return []
+        points: list[DataPoint] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            form = item.get("form")
+            if form not in self._forms:
+                continue
+            points.append(self._to_data_point(ticker, str(form), item))
+            if len(points) >= self._limit:
+                break
+        return points
+
+    def _to_data_point(
+        self, ticker: str, form: str, item: dict[str, Any]
+    ) -> DataPoint:
+        filing_date = str(item.get("filingDate") or "")[:10]
+        accession = str(item.get("accessionNumber") or "")
+        primary_doc = str(item.get("primaryDocument") or "")
+        cik = str(item.get("cik") or "")
+        if accession and primary_doc and cik:
+            url = (
+                f"https://www.sec.gov/Archives/edgar/data/{cik}/"
+                f"{accession.replace('-', '')}/{primary_doc}"
+            )
+        elif cik:
+            url = (
+                "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
+                f"&CIK={cik}&type={form}"
+            )
+        else:
+            url = (
+                "https://www.sec.gov/cgi-bin/browse-edgar?"
+                f"action=getcompany&company={ticker}"
+            )
+        published = filing_date or date.today().isoformat()
+        return DataPoint(
+            kind="filing",
+            title=f"{ticker} {form}",
+            url=url,
+            snippet=f"{ticker} filed {form} on {published}.",
+            published_at=published,
+        )
+
+
 def make_data_source(name: str) -> DataSource:
     """Build a DataSource by name. Called from the CLI / orchestrator."""
     if name == "stub":
