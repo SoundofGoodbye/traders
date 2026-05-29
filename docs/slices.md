@@ -60,6 +60,35 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - No caching, no retries, no rate-limit handling — operator runs `run-daily` once per close, which is well within yfinance's tolerances.
 - yfinance does not serve filings; `filing` kind is left empty pending a later EDGAR adapter.
 
+## Slice 11 — Local web UI: skeleton + Today + Positions pages
+
+- First UI surface for the system; read-only, server-rendered, runs locally. No React, no frontend build step, no npm.
+- New `traders.web` package: FastAPI app, Jinja2 templates under `traders/web/templates/`, plain inline CSS — no framework.
+- Read layer (`traders.web.queries`) wraps the existing `sqlite3` connection with typed read functions; agents keep their own write paths and the UI never mutates state in this slice.
+- `/` (Today) renders the latest daily report — candidates → theses → PM picks — surfacing conviction, size, direction, exit, and rationale.
+- `/positions` lists open and recently-closed positions; unrealized P&L is computed when a `DataSource` is configured, otherwise the price/P&L columns show `—`.
+- `traders web` CLI subcommand boots `uvicorn` on a configurable host/port; mirrors the shape of `run-daily` / `run-weekly`.
+- Tests cover the read layer against a seeded in-memory DB plus smoke tests asserting every route returns 200.
+- New dependencies (`fastapi`, `uvicorn`, `jinja2`) land behind a `web` extra so the default install footprint stays untouched.
+
+## Slice 12 — Theses detail + Reviews pages
+
+- `/theses` lists open and historical theses with query-param filters: ticker, date range, min conviction. Pure server-side filtering — no JS.
+- `/theses/{id}` shows the full thesis (rationale, exit, sizing) alongside the originating research note(s) and their `sources` field, with a backlink to the PM run that surfaced it.
+- `/reviews` lists the Reviewer's weekly post-mortems newest first; each row links to the closed position(s) it covered.
+- Reuses the Slice 11 read layer and template conventions; new read functions land in `traders.web.queries` rather than a per-page DB module.
+- Read-only — no writes anywhere. Tests follow the Slice 11 pattern: query-layer tests against a seeded DB plus a smoke test per route.
+- No schema changes, no new dependencies.
+
+## Slice 13 — Feedback actions in the UI
+
+- First write surface in the web UI. Buttons/forms on `/positions` (and relevant detail pages) replace the Slice 6 feedback CLI for the common actions: report fill, partial, skip, sell.
+- POST endpoints in `traders.web` call the existing Slice 6 feedback functions directly — no duplicated business logic, no parallel write path into `positions`.
+- CSRF protection via a per-session token stored in a signed cookie; tokens are required on every POST. Single-user assumption — no login, no accounts.
+- The Slice 6 CLI continues to work unchanged; the UI is an alternative entry point, not a replacement.
+- Tests cover the POST handlers (happy path + CSRF rejection) and assert the resulting `positions` row matches what the CLI would have written for the same input.
+- No schema changes, no new dependencies beyond Slice 11's `web` extra.
+
 ## Slice 10+
 
 - Additional data sources (FMP, Polygon, SEC EDGAR for filings) behind the same `DataSource` protocol.
