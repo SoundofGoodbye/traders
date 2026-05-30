@@ -55,10 +55,14 @@ def test_list_theses_min_conviction_filter(db, tmp_path):
 
 
 def test_list_theses_date_filters(db, tmp_path):
+    # created_at is the wall-clock run time, not the seed run_date, so the
+    # date filters are exercised relative to the actual stored timestamp.
     _seed(db, tmp_path, ["AAA"], date(2026, 5, 20))
-    assert queries.list_theses(db, date_from="2099-01-01") == []
-    assert queries.list_theses(db, date_to="2000-01-01") == []
-    assert queries.list_theses(db, date_to="2026-05-20")  # inclusive of that day
+    created_day = queries.list_theses(db)[0].created_at[:10]
+    assert queries.list_theses(db, date_from="2099-01-01") == []  # after everything
+    assert queries.list_theses(db, date_to="2000-01-01") == []  # before everything
+    assert queries.list_theses(db, date_from=created_day)  # inclusive lower bound
+    assert queries.list_theses(db, date_to=created_day)  # inclusive upper bound
 
 
 def test_notes_for_thesis(db, tmp_path):
