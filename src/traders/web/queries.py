@@ -1,0 +1,237 @@
+"""Read-only query layer for the web UI.
+
+Typed read functions over the same `sqlite3` connection the agents use.
+The UI never writes through here — write actions go through
+`traders.feedback`. Mirrors the SELECT shapes already used by the agents
+(`portfolio.py`, `reports.py`) rather than introducing a new data model.
+"""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from dataclasses import dataclass
+
+_THESIS_COLS = (
+    "id, ticker, thesis_type, direction, conviction, suggested_size_pct,"
+    " exit_condition, rationale, created_at, status, run_id, research_run_id"
+)
+# Same columns, qualified for queries that JOIN another table with an `id`.
+_THESIS_COLS_Q = "theses." + _THESIS_COLS.replace(", ", ", theses.")
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """One Scout candidate row."""
+
+    ticker: str
+    reason: str | None
+    scout_run_id: int
+
+
+@dataclass(frozen=True)
+class Thesis:
+    """A full `theses` row, including rationale / exit / sizing."""
+
+    id: int
+    ticker: str
+    thesis_type: str
+    direction: str
+    conviction: int
+    suggested_size_pct: float
+    exit_condition: str | None
+    rationale: str | None
+    created_at: str
+    status: str
+    run_id: int | None
+    research_run_id: int | None
+
+
+@dataclass(frozen=True)
+class Pick:
+    """A PM decision joined with its thesis."""
+
+    thesis: Thesis
+    decision: str
+    reason: str | None
+    pm_run_id: int
+
+
+@dataclass(frozen=True)
+class Position:
+    """A `positions` row plus its thesis direction (for P&L)."""
+
+    id: int
+    ticker: str
+    thesis_id: int
+    opened_at: str
+    closed_at: str | None
+    entry_price: float | None
+    exit_price: float | None
+    size_pct: float
+    status: str
+    direction: str | None
+
+
+def _thesis(row: tuple) -> Thesis:
+    return Thesis(
+        id=int(row[0]),
+        ticker=row[1],
+        thesis_type=row[2],
+        direction=row[3],
+        conviction=int(row[4]),
+        suggested_size_pct=float(row[5]),
+        exit_condition=row[6],
+        rationale=row[7],
+        created_at=row[8],
+        status=row[9],
+        run_id=None if row[10] is None else int(row[10]),
+        research_run_id=None if row[11] is None else int(row[11]),
+    )
+
+
+def _position(row: tuple) -> Position:
+    return Position(
+        id=int(row[0]),
+        ticker=row[1],
+        thesis_id=int(row[2]),
+        opened_at=row[3],
+        closed_at=row[4],
+        entry_price=None if row[5] is None else float(row[5]),
+        exit_price=None if row[6] is None else float(row[6]),
+        size_pct=float(row[7]),
+        status=row[8],
+        direction=row[9],
+    )
+
+
+_POSITION_SELECT = (
+    "SELECT p.id, p.ticker, p.thesis_id, p.opened_at, p.closed_at,"
+    " p.entry_price, p.exit_price, p.size_pct, p.status, t.direction"
+    " FROM positions p LEFT JOIN theses t ON t.id = p.thesis_id"
+)
+
+
+# --- candidates -------------------------------------------------------------
+
+
+def latest_scout_run_id(conn: sqlite3.Connection) -> int | None:
+    """Most recent `scout_run_id` in `candidates`, or None if empty."""
+    row = conn.execute("SELECT MAX(scout_run_id) FROM candidates").fetchone()
+    if row is None or row[0] is None:
+        return None
+    return int(row[0])
+
+
+def candidates_for_run(conn: sqlite3.Connection, scout_run_id: int) -> list[Candidate]:
+    """All candidates from one Scout run, in insertion order."""
+    rows = conn.execute(
+        "SELECT ticker, reason, scout_run_id FROM candidates"
+        " WHERE scout_run_id = ? ORDER BY id",
+        (scout_run_id,),
+    ).fetchall()
+    return [Candidate(ticker=r[0], reason=r[1], scout_run_id=int(r[2])) for r in rows]
+
+
+# --- theses -----------------------------------------------------------------
+
+
+def latest_analyst_run_id(conn: sqlite3.Connection) -> int | None:
+    """Most recent analyst `run_id` in `theses`, or None if empty."""
+    row = conn.execute("SELECT MAX(run_id) FROM theses").fetchone()
+    if row is None or row[0] is None:
+        return None
+    return int(row[0])
+
+
+def theses_for_run(conn: sqlite3.Connection, run_id: int) -> list[Thesis]:
+    """All theses from one Analyst run, in insertion order."""
+    rows = conn.execute(
+        f"SELECT {_THESIS_COLS} FROM theses WHERE run_id = ? ORDER BY id",
+        (run_id,),
+    ).fetchall()
+    return [_thesis(r) for r in rows]
+
+
+def thesis_by_id(conn: sqlite3.Connection, thesis_id: int) -> Thesis | None:
+    """A single thesis, or None if it doesn't exist."""
+    row = conn.execute(
+        f"SELECT {_THESIS_COLS} FROM theses WHERE id = ?",
+        (thesis_id,),
+    ).fetchone()
+    return None if row is None else _thesis(row)
+
+
+# --- PM picks ---------------------------------------------------------------
+
+
+def latest_pm_run_id(conn: sqlite3.Connection) -> int | None:
+    """Most recent `pm_run_id` in `pm_decisions`, or None if empty."""
+    row = conn.execute("SELECT MAX(pm_run_id) FROM pm_decisions").fetchone()
+    if row is None or row[0] is None:
+        return None
+    return int(row[0])
+
+
+def picks_for_run(conn: sqlite3.Connection, pm_run_id: int) -> list[Pick]:
+    """PM decisions for one run, each joined with its full thesis.
+
+    Accepted picks sort first, then by descending conviction.
+    """
+    rows = conn.execute(
+        f"SELECT d.decision, d.reason, d.pm_run_id, {_THESIS_COLS_Q}"
+        " FROM pm_decisions d JOIN theses ON theses.id = d.thesis_id"
+        " WHERE d.pm_run_id = ?"
+        " ORDER BY CASE d.decision WHEN 'accepted' THEN 0 ELSE 1 END,"
+        " theses.conviction DESC, theses.id",
+        (pm_run_id,),
+    ).fetchall()
+    return [
+        Pick(
+            thesis=_thesis(r[3:]),
+            decision=r[0],
+            reason=r[1],
+            pm_run_id=int(r[2]),
+        )
+        for r in rows
+    ]
+
+
+# --- positions --------------------------------------------------------------
+
+
+def open_positions(conn: sqlite3.Connection) -> list[Position]:
+    """All open positions, oldest first."""
+    rows = conn.execute(
+        f"{_POSITION_SELECT} WHERE p.status = 'open' ORDER BY p.id"
+    ).fetchall()
+    return [_position(r) for r in rows]
+
+
+def recently_closed_positions(
+    conn: sqlite3.Connection, limit: int = 20
+) -> list[Position]:
+    """Recently closed positions, most recently closed first."""
+    rows = conn.execute(
+        f"{_POSITION_SELECT} WHERE p.status = 'closed'"
+        " ORDER BY p.closed_at DESC, p.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [_position(r) for r in rows]
+
+
+def parse_sources(raw: str | None) -> list[str]:
+    """Decode a `research_notes.sources` JSON blob into a flat list.
+
+    Sources are persisted as a JSON array of strings. Returns an empty
+    list for null/blank/unparseable values — display code never trusts it.
+    """
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return [raw]
+    if isinstance(data, list):
+        return [str(x) for x in data]
+    return [str(data)]

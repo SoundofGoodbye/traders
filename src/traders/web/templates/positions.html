@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% set active = 'positions' %}
+{% block title %}Positions — traders{% endblock %}
+{% macro pnl_cell(pnl) %}
+  {% if pnl is none %}
+    <td class="num">—</td>
+  {% else %}
+    <td class="num {{ 'pnl-pos' if pnl >= 0 else 'pnl-neg' }}">{{ "%+.2f"|format(pnl) }}%</td>
+  {% endif %}
+{% endmacro %}
+{% block content %}
+  <h1>Positions</h1>
+  {% if not has_prices %}
+    <p class="sub">Live prices off — start with <code>--data-source yfinance</code> for unrealized P&amp;L.</p>
+  {% endif %}
+
+  <h2>Open</h2>
+  {% if open_positions %}
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Dir</th><th class="num">Entry</th>
+        <th class="num">Price</th><th class="num">Size %</th>
+        <th class="num">Unrealized</th><th>Opened</th>
+      </tr></thead>
+      <tbody>
+        {% for v in open_positions %}
+          {% set p = v.p %}
+          <tr>
+            <td class="ticker">{{ p.ticker }}</td>
+            <td><span class="tag {{ p.direction or 'long' }}">{{ p.direction or "—" }}</span></td>
+            <td class="num">{{ "%.2f"|format(p.entry_price) if p.entry_price is not none else "—" }}</td>
+            <td class="num">{{ "%.2f"|format(v.current_price) if v.current_price is not none else "—" }}</td>
+            <td class="num">{{ "%.1f"|format(p.size_pct) }}</td>
+            {{ pnl_cell(v.pnl_pct) }}
+            <td class="meta">{{ p.opened_at[:10] }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No open positions.</p>
+  {% endif %}
+
+  <h2>Recently closed</h2>
+  {% if closed_positions %}
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th>Dir</th><th class="num">Entry</th>
+        <th class="num">Exit</th><th class="num">Size %</th>
+        <th class="num">Realized</th><th>Closed</th>
+      </tr></thead>
+      <tbody>
+        {% for v in closed_positions %}
+          {% set p = v.p %}
+          <tr>
+            <td class="ticker">{{ p.ticker }}</td>
+            <td><span class="tag {{ p.direction or 'long' }}">{{ p.direction or "—" }}</span></td>
+            <td class="num">{{ "%.2f"|format(p.entry_price) if p.entry_price is not none else "—" }}</td>
+            <td class="num">{{ "%.2f"|format(p.exit_price) if p.exit_price is not none else "—" }}</td>
+            <td class="num">{{ "%.1f"|format(p.size_pct) }}</td>
+            {{ pnl_cell(v.pnl_pct) }}
+            <td class="meta">{{ p.closed_at[:10] if p.closed_at else "—" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No closed positions.</p>
+  {% endif %}
+{% endblock %}

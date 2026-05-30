@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}traders{% endblock %}</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --surface: #171a21;
+      --surface-2: #1f232c;
+      --border: #2a2f3a;
+      --text: #e6e8ec;
+      --muted: #9aa3b2;
+      --accent: #5b9dff;
+      --good: #3ddc97;
+      --bad: #ff6b6b;
+      --radius: 10px;
+      --space: 1rem;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+    }
+    nav {
+      display: flex;
+      gap: 1.5rem;
+      align-items: baseline;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0.9rem 1.25rem;
+    }
+    nav .brand { font-weight: 700; letter-spacing: 0.02em; color: var(--text); }
+    nav a { color: var(--muted); text-decoration: none; }
+    nav a:hover, nav a.active { color: var(--accent); }
+    main { max-width: 1080px; margin: 0 auto; padding: 1.5rem 1.25rem 4rem; }
+    h1 { font-size: 1.5rem; margin: 0.5rem 0 0.25rem; }
+    h2 { font-size: 1.05rem; margin: 2rem 0 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .sub { color: var(--muted); margin: 0 0 1rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      margin-bottom: 0.85rem;
+    }
+    .row { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+    .ticker { font-weight: 700; font-size: 1.05rem; }
+    .tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      padding: 0.12rem 0.5rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .tag.long { color: var(--good); border-color: var(--good); }
+    .tag.short { color: var(--bad); border-color: var(--bad); }
+    .meta { color: var(--muted); font-size: 0.85rem; }
+    .rationale { margin: 0.5rem 0 0; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pnl-pos { color: var(--good); }
+    .pnl-neg { color: var(--bad); }
+    .empty { color: var(--muted); font-style: italic; }
+    a.link { color: var(--accent); text-decoration: none; }
+    a.link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <header>
+    <nav>
+      <span class="brand">traders</span>
+      <a href="/" class="{{ 'active' if active == 'today' else '' }}">Today</a>
+      <a href="/positions" class="{{ 'active' if active == 'positions' else '' }}">Positions</a>
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

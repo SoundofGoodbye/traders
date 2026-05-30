@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% set active = 'today' %}
+{% block title %}Today — traders{% endblock %}
+{% block content %}
+  <h1>Today</h1>
+  {% if pm_run_id is none %}
+    <p class="sub empty">No daily report yet. Run <code>traders run-daily</code> to generate one.</p>
+  {% else %}
+    <p class="sub">Latest PM run #{{ pm_run_id }} — {{ accepted|length }} accepted, {{ rejected|length }} rejected.</p>
+
+    <h2>PM picks</h2>
+    {% if accepted %}
+      {% for pick in accepted %}
+        {% set t = pick.thesis %}
+        <article class="card">
+          <div class="row">
+            <span><span class="ticker">{{ t.ticker }}</span>
+              <span class="tag {{ t.direction }}">{{ t.direction }}</span>
+              <span class="tag">{{ t.thesis_type }}</span></span>
+            <span class="meta">conviction {{ t.conviction }} · size {{ "%.1f"|format(t.suggested_size_pct) }}%</span>
+          </div>
+          {% if t.rationale %}<p class="rationale">{{ t.rationale }}</p>{% endif %}
+          {% if t.exit_condition %}<p class="meta">Exit: {{ t.exit_condition }}</p>{% endif %}
+        </article>
+      {% endfor %}
+    {% else %}
+      <p class="empty">No theses accepted in this run.</p>
+    {% endif %}
+
+    {% if rejected %}
+      <h2>Rejected</h2>
+      {% for pick in rejected %}
+        {% set t = pick.thesis %}
+        <article class="card">
+          <div class="row">
+            <span><span class="ticker">{{ t.ticker }}</span>
+              <span class="tag {{ t.direction }}">{{ t.direction }}</span>
+              <span class="tag">{{ t.thesis_type }}</span></span>
+            <span class="meta">conviction {{ t.conviction }}</span>
+          </div>
+          {% if pick.reason %}<p class="meta">{{ pick.reason }}</p>{% endif %}
+        </article>
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+
+  <h2>Candidates</h2>
+  {% if candidates %}
+    <table>
+      <thead><tr><th>Ticker</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for c in candidates %}
+          <tr><td class="ticker">{{ c.ticker }}</td><td class="meta">{{ c.reason or "—" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No candidates yet.</p>
+  {% endif %}
+{% endblock %}

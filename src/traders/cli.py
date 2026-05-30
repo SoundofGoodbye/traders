@@ -170,6 +170,18 @@ def main(argv: list[str] | None = None) -> None:
         help="Write the rendered review to this path instead of stdout",
     )
 
+    web = sub.add_parser("web", help="Serve the local read-only web UI")
+    web.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    web.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    web.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    web.add_argument(
+        "--data-source",
+        dest="data_source",
+        choices=("stub", "yfinance", "edgar"),
+        default="stub",
+        help="Price source for unrealized P&L (default: stub → no live prices)",
+    )
+
     feedback = sub.add_parser("feedback", help="Report execution feedback")
     fb_sub = feedback.add_subparsers(dest="action", required=True)
 
@@ -339,6 +351,21 @@ def main(argv: list[str] | None = None) -> None:
                 f"{result.post_mortems_written} post-mortem(s)"
             )
         conn.close()
+        return
+
+    if args.cmd == "web":
+        try:
+            import uvicorn
+        except ImportError as e:
+            raise SystemExit(
+                "the web UI requires the 'web' extra. Install with: uv sync --extra web"
+            ) from e
+        from traders.web.app import create_app
+        from traders.web.prices import price_fn_for_source
+
+        app = create_app(args.db, price_fn=price_fn_for_source(args.data_source))
+        print(f"serving traders web UI on http://{args.host}:{args.port}")
+        uvicorn.run(app, host=args.host, port=args.port)
         return
 
     if args.cmd == "feedback":
