@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% set active = 'reviews' %}
+{% block title %}Reviews — traders{% endblock %}
+{% block content %}
+  <h1>Weekly reviews</h1>
+  <p class="sub">Reviewer post-mortems over closed positions, newest first.</p>
+  {% if post_mortems %}
+    {% for pm in post_mortems %}
+      <article class="card">
+        <div class="row">
+          <span><span class="ticker">{{ pm.ticker }}</span>
+            <span class="tag {{ pm.direction }}">{{ pm.direction }}</span>
+            <span class="tag">{{ pm.thesis_type }}</span></span>
+          <span class="meta">review #{{ pm.reviewer_run_id }} ·
+            <a class="link" href="/positions">position {{ pm.position_id }}</a></span>
+        </div>
+        <p class="meta">
+          {{ "%.2f"|format(pm.entry_price) if pm.entry_price is not none else "—" }}
+          → {{ "%.2f"|format(pm.exit_price) if pm.exit_price is not none else "—" }}
+          · size {{ "%.1f"|format(pm.size_pct) }}%
+          · opened {{ pm.opened_at[:10] }}{% if pm.closed_at %}, closed {{ pm.closed_at[:10] }}{% endif %}
+        </p>
+        {% if pm.outcome %}<p class="rationale"><strong>Outcome:</strong> {{ pm.outcome }}</p>{% endif %}
+        {% if pm.lessons %}<p class="rationale"><strong>Lessons:</strong> {{ pm.lessons }}</p>{% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p class="empty">No post-mortems yet. Run <code>traders run-weekly</code> after closing positions.</p>
+  {% endif %}
+{% endblock %}

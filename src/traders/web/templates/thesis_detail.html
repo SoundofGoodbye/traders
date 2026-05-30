@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% set active = 'theses' %}
+{% block title %}{{ thesis.ticker }} thesis #{{ thesis.id }} — traders{% endblock %}
+{% block content %}
+  <p class="sub"><a class="link" href="/theses">← Theses</a></p>
+  <h1>{{ thesis.ticker }}
+    <span class="tag {{ thesis.direction }}">{{ thesis.direction }}</span>
+    <span class="tag">{{ thesis.thesis_type }}</span>
+  </h1>
+  <p class="sub">Thesis #{{ thesis.id }} · {{ thesis.status }} · created {{ thesis.created_at[:10] }}</p>
+
+  <article class="card">
+    <div class="row">
+      <span class="meta">conviction {{ thesis.conviction }} · suggested size {{ "%.1f"|format(thesis.suggested_size_pct) }}%</span>
+    </div>
+    {% if thesis.rationale %}<p class="rationale">{{ thesis.rationale }}</p>{% endif %}
+    {% if thesis.exit_condition %}<p class="meta">Exit: {{ thesis.exit_condition }}</p>{% endif %}
+  </article>
+
+  <h2>PM decisions</h2>
+  {% if backlinks %}
+    {% for b in backlinks %}
+      <article class="card">
+        <div class="row">
+          <span>PM run #{{ b.pm_run_id }}
+            <span class="tag">{{ b.decision }}</span></span>
+        </div>
+        {% if b.reason %}<p class="meta">{{ b.reason }}</p>{% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p class="empty">No PM run has evaluated this thesis yet.</p>
+  {% endif %}
+
+  <h2>Research notes</h2>
+  {% if notes %}
+    {% for n in notes %}
+      <article class="card">
+        <div class="row">
+          <span class="meta">Research run #{{ n.run_id }} · {{ n.created_at[:10] }}</span>
+        </div>
+        <p class="pre">{{ n.content }}</p>
+        {% if n.sources %}
+          <p class="meta">Sources:</p>
+          <ul>
+            {% for s in n.sources %}<li class="meta">{{ s }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+      </article>
+    {% endfor %}
+  {% else %}
+    <p class="empty">No research notes linked to this thesis.</p>
+  {% endif %}
+{% endblock %}

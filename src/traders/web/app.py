@@ -19,7 +19,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -93,6 +93,71 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
                 "closed_positions": [_closed_position_view(p) for p in closed_rows],
                 "has_prices": price_fn is not None,
             },
+        )
+
+    @app.get("/theses", response_class=HTMLResponse)
+    def theses(
+        request: Request,
+        conn: sqlite3.Connection = Depends(get_conn),
+        ticker: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        min_conviction: str | None = None,
+    ) -> Any:
+        # Parse min_conviction leniently: a blank form field arrives as ""
+        # which we treat as "no filter" rather than a 422.
+        min_conv: int | None = None
+        if min_conviction not in (None, ""):
+            try:
+                min_conv = int(min_conviction)
+            except ValueError:
+                min_conv = None
+        rows = queries.list_theses(
+            conn,
+            ticker=ticker or None,
+            date_from=date_from or None,
+            date_to=date_to or None,
+            min_conviction=min_conv,
+        )
+        return templates.TemplateResponse(
+            request=request,
+            name="theses.html",
+            context={
+                "theses": rows,
+                "filters": {
+                    "ticker": ticker or "",
+                    "date_from": date_from or "",
+                    "date_to": date_to or "",
+                    "min_conviction": min_conviction or "",
+                },
+            },
+        )
+
+    @app.get("/theses/{thesis_id}", response_class=HTMLResponse)
+    def thesis_detail(
+        thesis_id: int,
+        request: Request,
+        conn: sqlite3.Connection = Depends(get_conn),
+    ) -> Any:
+        thesis = queries.thesis_by_id(conn, thesis_id)
+        if thesis is None:
+            raise HTTPException(status_code=404, detail=f"no thesis {thesis_id}")
+        return templates.TemplateResponse(
+            request=request,
+            name="thesis_detail.html",
+            context={
+                "thesis": thesis,
+                "notes": queries.notes_for_thesis(conn, thesis),
+                "backlinks": queries.backlinks_for_thesis(conn, thesis_id),
+            },
+        )
+
+    @app.get("/reviews", response_class=HTMLResponse)
+    def reviews(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> Any:
+        return templates.TemplateResponse(
+            request=request,
+            name="reviews.html",
+            context={"post_mortems": queries.list_post_mortems(conn)},
         )
 
     return app

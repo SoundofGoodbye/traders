@@ -58,6 +58,47 @@ class Pick:
 
 
 @dataclass(frozen=True)
+class ResearchNote:
+    """A `research_notes` row with its sources decoded to a list."""
+
+    id: int
+    ticker: str
+    run_id: int
+    content: str
+    sources: list[str]
+    created_at: str
+
+
+@dataclass(frozen=True)
+class Backlink:
+    """A PM decision that surfaced a given thesis."""
+
+    pm_run_id: int
+    decision: str
+    reason: str | None
+
+
+@dataclass(frozen=True)
+class PostMortem:
+    """A `post_mortems` row joined with its position + thesis context."""
+
+    id: int
+    reviewer_run_id: int
+    position_id: int
+    ticker: str
+    direction: str
+    thesis_type: str
+    entry_price: float | None
+    exit_price: float | None
+    size_pct: float
+    opened_at: str
+    closed_at: str | None
+    outcome: str | None
+    lessons: str | None
+    created_at: str
+
+
+@dataclass(frozen=True)
 class Position:
     """A `positions` row plus its thesis direction (for P&L)."""
 
@@ -112,6 +153,24 @@ _POSITION_SELECT = (
 )
 
 
+def parse_sources(raw: str | None) -> list[str]:
+    """Decode a `research_notes.sources` JSON blob into a flat list.
+
+    Sources are persisted as a JSON array of strings. Returns an empty
+    list for null/blank values and a single-item list for anything that
+    isn't a JSON array — display code never trusts it.
+    """
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (ValueError, TypeError):
+        return [raw]
+    if isinstance(data, list):
+        return [str(x) for x in data]
+    return [str(data)]
+
+
 # --- candidates -------------------------------------------------------------
 
 
@@ -162,6 +221,75 @@ def thesis_by_id(conn: sqlite3.Connection, thesis_id: int) -> Thesis | None:
     return None if row is None else _thesis(row)
 
 
+def list_theses(
+    conn: sqlite3.Connection,
+    *,
+    ticker: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    min_conviction: int | None = None,
+) -> list[Thesis]:
+    """Filtered thesis list, newest first.
+
+    All filters are optional and combined with AND. `date_from`/`date_to`
+    bound `created_at` (ISO strings sort chronologically). Every value is
+    bound as a parameter — no user input is interpolated into SQL.
+    """
+    clauses: list[str] = []
+    params: list[object] = []
+    if ticker:
+        clauses.append("ticker = ?")
+        params.append(ticker.strip().upper())
+    if date_from:
+        clauses.append("created_at >= ?")
+        params.append(date_from)
+    if date_to:
+        # "~" sorts after any time-of-day suffix, so a bare date stays inclusive
+        clauses.append("created_at <= ?")
+        params.append(date_to + "~")
+    if min_conviction is not None:
+        clauses.append("conviction >= ?")
+        params.append(min_conviction)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = conn.execute(
+        f"SELECT {_THESIS_COLS} FROM theses{where} ORDER BY id DESC",
+        params,
+    ).fetchall()
+    return [_thesis(r) for r in rows]
+
+
+def notes_for_thesis(conn: sqlite3.Connection, thesis: Thesis) -> list[ResearchNote]:
+    """Research notes behind a thesis, matched on its research run + ticker."""
+    if thesis.research_run_id is None:
+        return []
+    rows = conn.execute(
+        "SELECT id, ticker, run_id, content, sources, created_at"
+        " FROM research_notes WHERE run_id = ? AND ticker = ? ORDER BY id",
+        (thesis.research_run_id, thesis.ticker),
+    ).fetchall()
+    return [
+        ResearchNote(
+            id=int(r[0]),
+            ticker=r[1],
+            run_id=int(r[2]),
+            content=r[3],
+            sources=parse_sources(r[4]),
+            created_at=r[5],
+        )
+        for r in rows
+    ]
+
+
+def backlinks_for_thesis(conn: sqlite3.Connection, thesis_id: int) -> list[Backlink]:
+    """PM runs that evaluated this thesis, newest first."""
+    rows = conn.execute(
+        "SELECT pm_run_id, decision, reason FROM pm_decisions"
+        " WHERE thesis_id = ? ORDER BY pm_run_id DESC",
+        (thesis_id,),
+    ).fetchall()
+    return [Backlink(pm_run_id=int(r[0]), decision=r[1], reason=r[2]) for r in rows]
+
+
 # --- PM picks ---------------------------------------------------------------
 
 
@@ -187,12 +315,7 @@ def picks_for_run(conn: sqlite3.Connection, pm_run_id: int) -> list[Pick]:
         (pm_run_id,),
     ).fetchall()
     return [
-        Pick(
-            thesis=_thesis(r[3:]),
-            decision=r[0],
-            reason=r[1],
-            pm_run_id=int(r[2]),
-        )
+        Pick(thesis=_thesis(r[3:]), decision=r[0], reason=r[1], pm_run_id=int(r[2]))
         for r in rows
     ]
 
@@ -208,6 +331,15 @@ def open_positions(conn: sqlite3.Connection) -> list[Position]:
     return [_position(r) for r in rows]
 
 
+def open_position_for_thesis(conn: sqlite3.Connection, thesis_id: int) -> int | None:
+    """The open position id for a thesis, or None. Mirrors feedback's check."""
+    row = conn.execute(
+        "SELECT id FROM positions WHERE thesis_id = ? AND status = 'open'",
+        (thesis_id,),
+    ).fetchone()
+    return None if row is None else int(row[0])
+
+
 def recently_closed_positions(
     conn: sqlite3.Connection, limit: int = 20
 ) -> list[Position]:
@@ -220,18 +352,37 @@ def recently_closed_positions(
     return [_position(r) for r in rows]
 
 
-def parse_sources(raw: str | None) -> list[str]:
-    """Decode a `research_notes.sources` JSON blob into a flat list.
+# --- reviews ----------------------------------------------------------------
 
-    Sources are persisted as a JSON array of strings. Returns an empty
-    list for null/blank/unparseable values — display code never trusts it.
-    """
-    if not raw:
-        return []
-    try:
-        data = json.loads(raw)
-    except (ValueError, TypeError):
-        return [raw]
-    if isinstance(data, list):
-        return [str(x) for x in data]
-    return [str(data)]
+
+def list_post_mortems(conn: sqlite3.Connection, limit: int = 100) -> list[PostMortem]:
+    """Weekly post-mortems joined with position + thesis context, newest first."""
+    rows = conn.execute(
+        "SELECT pm.id, pm.reviewer_run_id, pm.position_id, p.ticker, t.direction,"
+        " t.thesis_type, p.entry_price, p.exit_price, p.size_pct,"
+        " p.opened_at, p.closed_at, pm.outcome, pm.lessons, pm.created_at"
+        " FROM post_mortems pm"
+        " JOIN positions p ON p.id = pm.position_id"
+        " JOIN theses t ON t.id = p.thesis_id"
+        " ORDER BY pm.reviewer_run_id DESC, pm.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+    return [
+        PostMortem(
+            id=int(r[0]),
+            reviewer_run_id=int(r[1]),
+            position_id=int(r[2]),
+            ticker=r[3],
+            direction=r[4],
+            thesis_type=r[5],
+            entry_price=None if r[6] is None else float(r[6]),
+            exit_price=None if r[7] is None else float(r[7]),
+            size_pct=float(r[8]),
+            opened_at=r[9],
+            closed_at=r[10],
+            outcome=r[11],
+            lessons=r[12],
+            created_at=r[13],
+        )
+        for r in rows
+    ]
