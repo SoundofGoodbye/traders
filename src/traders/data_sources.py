@@ -384,4 +384,8 @@ def make_data_source(name: str) -> DataSource:
         return StubDataSource()
     if name == "yfinance":
         return YFinanceDataSource()
-    raise ValueError(f"unknown data source: {name!r} (expected 'stub' or 'yfinance')")
+    if name == "edgar":
+        return EdgarDataSource()
+    raise ValueError(
+        f"unknown data source: {name!r} (expected 'stub', 'yfinance', or 'edgar')"
+    )

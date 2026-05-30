@@ -60,6 +60,16 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - No caching, no retries, no rate-limit handling — operator runs `run-daily` once per close, which is well within yfinance's tolerances.
 - yfinance does not serve filings; `filing` kind is left empty pending a later EDGAR adapter.
 
+## Slice 10 — SEC EDGAR data source
+
+- Closes the `kind="filing"` gap Slice 9 left open. `EdgarDataSource` emits one DataPoint per recent 10-K / 10-Q / 8-K (forms and limit configurable) from SEC EDGAR's submissions JSON.
+- Opt-in via `--data-source edgar` on `research` and `run-daily`; default stays `stub` so existing tests remain hermetic.
+- Two-step EDGAR shape (ticker → CIK map, then per-CIK submissions JSON) hidden behind one `filings_fn(ticker) -> list[dict]`; tests inject the fetcher to stay network-free.
+- The default fetcher hard-requires `TRADERS_EDGAR_UA` — a real contact string like `"Acme Research user@acme.com"`. SEC blocks anonymous traffic, so an unset env var raises `RuntimeError` at construction. Mirrors the yfinance missing-package pattern: fail fast at the boundary, not deep inside a fetch.
+- Errors return `[]` per the `DataSource` contract — a 429 or DNS failure can't kill the Researcher run.
+- No new dependencies — stdlib `urllib.request` + `json`. No caching, no retries, no rate-limit handling; once-per-close cadence stays well inside SEC's tolerances.
+- Pairs naturally with `yfinance`: agents read whichever backend is configured through the same `DataSource` protocol, with no awareness of either.
+
 ## Slice 11 — Local web UI: skeleton + Today + Positions pages
 
 - First UI surface for the system; read-only, server-rendered, runs locally. No React, no frontend build step, no npm.
@@ -89,8 +99,8 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - Tests cover the POST handlers (happy path + CSRF rejection) and assert the resulting `positions` row matches what the CLI would have written for the same input.
 - No schema changes, no new dependencies beyond Slice 11's `web` extra.
 
-## Slice 10+
+## Future
 
-- Additional data sources (FMP, Polygon, SEC EDGAR for filings) behind the same `DataSource` protocol.
+- Additional data sources (FMP, Polygon, paid news APIs) behind the same `DataSource` protocol.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
 - Cross-run data caching if rate limits start mattering.
