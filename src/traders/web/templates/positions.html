@@ -20,7 +20,7 @@
       <thead><tr>
         <th>Ticker</th><th>Dir</th><th class="num">Entry</th>
         <th class="num">Price</th><th class="num">Size %</th>
-        <th class="num">Unrealized</th><th>Opened</th>
+        <th class="num">Unrealized</th><th>Opened</th><th>Sell</th>
       </tr></thead>
       <tbody>
         {% for v in open_positions %}
@@ -33,6 +33,13 @@
             <td class="num">{{ "%.1f"|format(p.size_pct) }}</td>
             {{ pnl_cell(v.pnl_pct) }}
             <td class="meta">{{ p.opened_at[:10] }}</td>
+            <td>
+              <form class="actions" method="post" action="/positions/{{ p.id }}/sell">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="number" name="price" step="0.01" min="0" placeholder="exit price" required>
+                <button type="submit">Sell</button>
+              </form>
+            </td>
           </tr>
         {% endfor %}
       </tbody>

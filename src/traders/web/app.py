@@ -2,8 +2,8 @@
 
 `create_app` wires routes over a SQLite database path. Each request gets
 its own short-lived connection (SQLite + threadpool safety); migrations
-are applied once at startup. Read-only in this slice — the only mutation
-surface arrives in slice 13 and routes through `traders.feedback`.
+are applied once at startup. Read routes are GET; write actions (slice 13)
+are POST and route through `traders.feedback` behind CSRF validation.
 
 This module imports FastAPI at module scope, so importing it requires the
 `web` extra. That's intentional: the module is only imported on the web
@@ -14,18 +14,20 @@ must live here rather than inside the factory.
 
 from __future__ import annotations
 
+import os
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from traders import feedback
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
-from traders.web import queries
+from traders.web import csrf, queries
 from traders.web.prices import PriceFn
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -52,6 +54,9 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
 
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)
+    # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
+    # otherwise a fresh per-process secret is fine for a single-user tool.
+    secret = os.environ.get("TRADERS_WEB_SECRET") or csrf.new_secret()
 
     def get_conn() -> Iterator[sqlite3.Connection]:
         conn = connect(db_path)
@@ -59,6 +64,56 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             yield conn
         finally:
             conn.close()
+
+    def render_with_csrf(request: Request, name: str, context: dict[str, Any]) -> Any:
+        """Render a template, ensuring a signed CSRF cookie is present and the
+        matching token is available to forms via `csrf_token`."""
+        token = csrf.token_from_cookie(secret, request.cookies.get(csrf.COOKIE_NAME))
+        cookie_value: str | None = None
+        if token is None:
+            token, cookie_value = csrf.issue(secret)
+        response = templates.TemplateResponse(
+            request=request, name=name, context={**context, "csrf_token": token}
+        )
+        if cookie_value is not None:
+            response.set_cookie(
+                csrf.COOKIE_NAME, cookie_value, httponly=True, samesite="strict"
+            )
+        return response
+
+    async def check_csrf(request: Request) -> None:
+        form = await request.form()
+        token = form.get(csrf.FIELD_NAME)
+        cookie = request.cookies.get(csrf.COOKIE_NAME)
+        if not csrf.validate(secret, cookie, token if isinstance(token, str) else None):
+            raise HTTPException(status_code=403, detail="CSRF validation failed")
+
+    def form_float(value: Any, field: str, *, required: bool = True) -> float | None:
+        if value in (None, ""):
+            if required:
+                raise HTTPException(status_code=400, detail=f"missing {field}")
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=f"invalid {field}") from e
+
+    def apply_feedback(fn: Callable[[sqlite3.Connection], Any]) -> None:
+        """Open a connection in this coroutine's own thread (SQLite
+        check_same_thread) and run a feedback write, mapping the domain
+        error to a 400."""
+        conn = connect(db_path)
+        try:
+            fn(conn)
+        except feedback.FeedbackError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        finally:
+            conn.close()
+
+    def redirect(url: str) -> Any:
+        return RedirectResponse(url=url, status_code=303)
+
+    # --- read routes --------------------------------------------------------
 
     @app.get("/", response_class=HTMLResponse)
     def today(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> Any:
@@ -85,10 +140,10 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     def positions(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> Any:
         open_rows = queries.open_positions(conn)
         closed_rows = queries.recently_closed_positions(conn)
-        return templates.TemplateResponse(
-            request=request,
-            name="positions.html",
-            context={
+        return render_with_csrf(
+            request,
+            "positions.html",
+            {
                 "open_positions": [_open_position_view(p, price_fn) for p in open_rows],
                 "closed_positions": [_closed_position_view(p) for p in closed_rows],
                 "has_prices": price_fn is not None,
@@ -142,13 +197,15 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
         thesis = queries.thesis_by_id(conn, thesis_id)
         if thesis is None:
             raise HTTPException(status_code=404, detail=f"no thesis {thesis_id}")
-        return templates.TemplateResponse(
-            request=request,
-            name="thesis_detail.html",
-            context={
+        return render_with_csrf(
+            request,
+            "thesis_detail.html",
+            {
                 "thesis": thesis,
                 "notes": queries.notes_for_thesis(conn, thesis),
                 "backlinks": queries.backlinks_for_thesis(conn, thesis_id),
+                "has_open_position": queries.open_position_for_thesis(conn, thesis_id)
+                is not None,
             },
         )
 
@@ -159,5 +216,60 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             name="reviews.html",
             context={"post_mortems": queries.list_post_mortems(conn)},
         )
+
+    # --- write actions (slice 13) -------------------------------------------
+    # POST handlers call the existing traders.feedback functions directly, so
+    # there is no parallel write path into `positions`. They are async and open
+    # their connection inline (apply_feedback) to keep SQLite use on one thread.
+    # After a successful write they 303-redirect back to the originating page.
+
+    @app.post("/theses/{thesis_id}/fill")
+    async def post_fill(thesis_id: int, request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        price = form_float(form.get("price"), "price")
+        size_pct = form_float(form.get("size_pct"), "size_pct", required=False)
+        notes = form.get("notes") or None
+        apply_feedback(
+            lambda c: feedback.record_fill(
+                c, thesis_id=thesis_id, price=price, size_pct=size_pct, notes=notes
+            )
+        )
+        return redirect(f"/theses/{thesis_id}")
+
+    @app.post("/theses/{thesis_id}/partial")
+    async def post_partial(thesis_id: int, request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        price = form_float(form.get("price"), "price")
+        size_pct = form_float(form.get("size_pct"), "size_pct")
+        notes = form.get("notes") or None
+        apply_feedback(
+            lambda c: feedback.record_partial(
+                c, thesis_id=thesis_id, price=price, size_pct=size_pct, notes=notes
+            )
+        )
+        return redirect(f"/theses/{thesis_id}")
+
+    @app.post("/theses/{thesis_id}/skip")
+    async def post_skip(thesis_id: int, request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        notes = form.get("notes") or None
+        apply_feedback(lambda c: feedback.record_skip(c, thesis_id=thesis_id, notes=notes))
+        return redirect(f"/theses/{thesis_id}")
+
+    @app.post("/positions/{position_id}/sell")
+    async def post_sell(position_id: int, request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        price = form_float(form.get("price"), "price")
+        notes = form.get("notes") or None
+        apply_feedback(
+            lambda c: feedback.record_sell(
+                c, price=price, position_id=position_id, notes=notes
+            )
+        )
+        return redirect("/positions")
 
     return app

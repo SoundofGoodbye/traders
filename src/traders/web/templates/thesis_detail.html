@@ -17,6 +17,31 @@
     {% if thesis.exit_condition %}<p class="meta">Exit: {{ thesis.exit_condition }}</p>{% endif %}
   </article>
 
+  <h2>Report execution</h2>
+  <div class="card">
+    {% if has_open_position %}
+      <p class="meta">This thesis has an open position — sell it from
+        <a class="link" href="/positions">Positions</a> before reporting a new fill.</p>
+    {% else %}
+      <form class="actions" method="post" action="/theses/{{ thesis.id }}/fill">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="number" name="price" step="0.01" min="0" placeholder="fill price" required>
+        <input type="number" name="size_pct" step="0.1" min="0" placeholder="size % (optional)">
+        <button type="submit">Fill</button>
+      </form>
+      <form class="actions" method="post" action="/theses/{{ thesis.id }}/partial" style="margin-top:0.5rem">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="number" name="price" step="0.01" min="0" placeholder="fill price" required>
+        <input type="number" name="size_pct" step="0.1" min="0" placeholder="partial size %" required>
+        <button type="submit" class="ghost">Partial</button>
+      </form>
+    {% endif %}
+    <form class="actions" method="post" action="/theses/{{ thesis.id }}/skip" style="margin-top:0.5rem">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="ghost">Skip</button>
+    </form>
+  </div>
+
   <h2>PM decisions</h2>
   {% if backlinks %}
     {% for b in backlinks %}
