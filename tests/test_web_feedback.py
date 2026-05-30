@@ -126,3 +126,83 @@ def test_csrf_forged_token_is_rejected(tmp_path):
     )
     assert resp.status_code == 403
     assert _positions(db_path) == []
+
+
+def test_partial_opens_position_at_partial_size(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id, suggested = _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    smaller = round(suggested / 2, 2)
+    resp = client.post(
+        f"/theses/{thesis_id}/partial",
+        data={"csrf_token": token, "price": "100", "size_pct": str(smaller)},
+    )
+    assert resp.status_code == 200
+    assert _positions(db_path) == [("AAA", 100.0, None, smaller, "open")]
+
+
+def test_fill_missing_price_is_400(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id, _ = _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    resp = client.post(f"/theses/{thesis_id}/fill", data={"csrf_token": token})
+    assert resp.status_code == 400
+    assert _positions(db_path) == []  # nothing written on a rejected request
+
+
+def test_fill_invalid_price_is_400(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id, _ = _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    resp = client.post(
+        f"/theses/{thesis_id}/fill",
+        data={"csrf_token": token, "price": "not-a-number"},
+    )
+    assert resp.status_code == 400
+    assert _positions(db_path) == []
+
+
+def test_partial_missing_size_is_400(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id, _ = _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    # size_pct is required for a partial — a partial without a size is a fill
+    resp = client.post(
+        f"/theses/{thesis_id}/partial",
+        data={"csrf_token": token, "price": "100"},
+    )
+    assert resp.status_code == 400
+    assert _positions(db_path) == []
+
+
+def test_fill_twice_maps_feedback_error_to_400(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id, _ = _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    first = client.post(
+        f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "100"}
+    )
+    assert first.status_code == 200
+    # second fill on a thesis that already has an open position is a domain
+    # error in traders.feedback; the web layer surfaces it as a 400, not a 500
+    second = client.post(
+        f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "105"}
+    )
+    assert second.status_code == 400
+    assert _positions(db_path) == [("AAA", 100.0, None, 2.0, "open")]
+
+
+def test_sell_unknown_position_maps_feedback_error_to_400(tmp_path):
+    db_path = tmp_path / "t.db"
+    _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    token = _csrf_token(client)
+    resp = client.post(
+        "/positions/999999/sell", data={"csrf_token": token, "price": "130"}
+    )
+    assert resp.status_code == 400

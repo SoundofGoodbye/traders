@@ -84,6 +84,18 @@ def test_open_positions_carry_direction(db, tmp_path):
     assert opens[0].entry_price == 100.0
 
 
+def test_open_position_for_thesis(db, tmp_path):
+    _, analyst_id, _ = _seed_daily(db, tmp_path, ["AAA"], date(2026, 5, 20))
+    thesis_id = db.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    # no position yet
+    assert queries.open_position_for_thesis(db, thesis_id) is None
+    event = record_fill(db, thesis_id=thesis_id, price=100.0)
+    assert queries.open_position_for_thesis(db, thesis_id) == event.position_id
+    # once sold, the thesis no longer has an *open* position
+    record_sell(db, price=110.0, position_id=event.position_id)
+    assert queries.open_position_for_thesis(db, thesis_id) is None
+
+
 def test_recently_closed_positions(db, tmp_path):
     _, _, _ = _seed_daily(db, tmp_path, ["AAA"], date(2026, 5, 20))
     thesis_id = db.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]

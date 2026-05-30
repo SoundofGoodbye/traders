@@ -133,6 +133,27 @@ def test_thesis_detail_route_ok_and_404(tmp_path):
     assert client.get("/theses/999999").status_code == 404
 
 
+def test_thesis_detail_hides_fill_form_when_position_open(tmp_path):
+    # _seed_path closes its position; seed a fresh thesis and leave it OPEN so
+    # the has_open_position=True branch of the detail route is exercised.
+    db_path = tmp_path / "t.db"
+    conn = connect(db_path)
+    apply_migrations(conn, MIGRATIONS)
+    _seed(conn, tmp_path, ["ZZZ"], date(2026, 5, 21))
+    thesis_id = conn.execute(
+        "SELECT id FROM theses WHERE ticker = 'ZZZ' LIMIT 1"
+    ).fetchone()[0]
+    record_fill(conn, thesis_id=thesis_id, price=100.0)  # left open, no sell
+    conn.close()
+
+    client = TestClient(create_app(db_path))
+    resp = client.get(f"/theses/{thesis_id}")
+    assert resp.status_code == 200
+    assert "has an open position" in resp.text
+    # the fill form action must not be rendered while a position is open
+    assert f'action="/theses/{thesis_id}/fill"' not in resp.text
+
+
 def test_reviews_route_ok(tmp_path):
     db_path = tmp_path / "t.db"
     _seed_path(db_path, tmp_path)
