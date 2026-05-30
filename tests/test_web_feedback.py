@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -35,10 +36,18 @@ def _seed(db_path, tmp_path, ticker="AAA"):
 
 
 def _csrf_token(client):
-    """Prime the CSRF cookie via a GET and return the raw token."""
-    client.get("/positions")
-    cookie = client.cookies.get("csrftoken")
-    return cookie.split(".")[0] if cookie else None
+    """Prime the CSRF cookie via a GET and return the raw token.
+
+    The cookie is HttpOnly + SameSite=strict; httpx's TestClient does not
+    auto-persist it into its jar, so we copy it from the Set-Cookie header
+    into the client (mirroring what a real browser does on a same-site POST).
+    """
+    resp = client.get("/positions")
+    match = re.search(r"csrftoken=([^;]+)", resp.headers.get("set-cookie", ""))
+    cookie_value = match.group(1) if match else client.cookies.get("csrftoken")
+    if cookie_value:
+        client.cookies.set("csrftoken", cookie_value)
+    return cookie_value.split(".")[0] if cookie_value else None
 
 
 def _positions(db_path):
