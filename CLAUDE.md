@@ -8,6 +8,7 @@ Conventions for Claude Code sessions in this repo.
 - SQLite via the stdlib `sqlite3` module. No ORM yet — premature.
 - `ruff` for lint and format with project defaults (see `pyproject.toml`).
 - `pytest` for tests.
+- The core install has **zero dependencies**. Optional extras hold everything else: `realdata` (yfinance) and `web` (FastAPI + uvicorn + Jinja2 + python-multipart, for the local UI in `src/traders/web/`). Web tests `importorskip("fastapi")` so the default `uv run pytest` stays hermetic.
 
 ## Workflow
 
@@ -18,9 +19,10 @@ Conventions for Claude Code sessions in this repo.
 
 ## Agents
 
-- Agents are sequential Python modules invoked from a daily orchestrator script (to be built in a later slice). Not multi-process, not async.
+- Agents are sequential Python modules invoked from the daily orchestrator (`traders.orchestrator`, shipped in slice 8; `run-daily` / `run-weekly` CLI). Not multi-process, not async.
 - Each agent reads from and writes to the SQLite db; there's no in-memory pipeline.
 - Order: Scout → Researcher → Analyst → Portfolio Manager. Reviewer runs weekly, separately.
+- The web UI (`src/traders/web/`) is a separate read/write surface over the same db: it reads agent output through `traders.web.queries` and writes only via the existing `traders.feedback` functions — never a parallel write path.
 
 ## Hard rules
 

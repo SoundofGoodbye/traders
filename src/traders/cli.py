@@ -170,7 +170,15 @@ def main(argv: list[str] | None = None) -> None:
         help="Write the rendered review to this path instead of stdout",
     )
 
-    web = sub.add_parser("web", help="Serve the local read-only web UI")
+    web = sub.add_parser(
+        "web",
+        help="Serve the local web UI",
+        epilog=(
+            "Set TRADERS_WEB_SECRET to a fixed value to keep feedback-form CSRF "
+            "cookies valid across restarts; otherwise a fresh secret is generated "
+            "per process and open forms must be reloaded after a restart."
+        ),
+    )
     web.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     web.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
     web.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")

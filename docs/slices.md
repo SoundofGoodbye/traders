@@ -2,6 +2,8 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
+**Status: slices 0–13 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+
 ## Slice 0 — scaffold
 
 - `pyproject.toml`, `src/traders/`, `tests/`, `migrations/001_initial.sql`, baseline docs.

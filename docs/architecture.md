@@ -44,13 +44,16 @@ watchlist.json
    ↓
 (manual execution by the user)
    ↓
-[Feedback CLI]     →  positions, feedback
+[Feedback CLI  or  Web UI]  →  positions, feedback
    ↓
 [Reviewer, weekly] →  post_mortems
 ```
+
+The **web UI** (`traders.web`, optional `web` extra) is an alternative front end over the same database. It reads agent output (candidates, theses, the PM report, positions, post-mortems) through a dedicated read layer and reports execution through the *same* `traders.feedback` functions the CLI uses — there is no second write path into `positions`. Agents remain CLI/orchestrator-driven; the UI never runs them.
 
 ## Decisions
 
 - **Sequential Python modules, not multi-process.** Each agent is a function (or small set of functions) invoked in order from a daily orchestrator script. No queue, no IPC, no async. v1 is small enough that this is the right call; revisit only if a single agent grows past what a single process can do in a reasonable wall-clock window.
 - **SQLite is the only persistence layer.** No Redis, no Postgres, no vector store in v1. If a slice needs richer querying, justify it then.
 - **Paper mode only.** The system never executes trades. The user receives a report, decides what to do, and reports back fills/skips through the feedback path.
+- **Web UI is a thin presentation/feedback surface, not a fifth agent.** It is read-only over agent tables and routes all writes through `traders.feedback`. It ships behind the `web` extra so the core install stays dependency-free, and binds to `127.0.0.1` (single-user, local). Form writes are CSRF-protected.
