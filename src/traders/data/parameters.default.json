@@ -1,0 +1,4 @@
+{
+  "batch_size": 10,
+  "max_total_size_pct": 20.0
+}

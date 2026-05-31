@@ -19,11 +19,11 @@ from pathlib import Path
 
 from traders.analyst import run as analyst_run
 from traders.data_sources import DataSource
-from traders.portfolio import DEFAULT_MAX_TOTAL_SIZE_PCT, DailyReport
+from traders.parameters import LearnedParameters, load_parameters
+from traders.portfolio import DailyReport
 from traders.portfolio import run as pm_run
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
-from traders.scout import DEFAULT_BATCH_SIZE
 from traders.scout import run as scout_run
 
 
@@ -51,13 +51,19 @@ class WeeklyRunResult:
 def run_daily(
     conn: sqlite3.Connection,
     watchlist_path: Path | None = None,
-    batch_size: int = DEFAULT_BATCH_SIZE,
-    max_total_size_pct: float = DEFAULT_MAX_TOTAL_SIZE_PCT,
+    batch_size: int | None = None,
+    max_total_size_pct: float | None = None,
     data_source: DataSource | None = None,
+    params: LearnedParameters | None = None,
 ) -> DailyRunResult:
-    """Run Scout → Researcher → Analyst → Portfolio Manager against `conn`."""
+    """Run Scout → Researcher → Analyst → Portfolio Manager against `conn`.
+
+    Learned parameters are loaded once and threaded to the agents;
+    explicit `batch_size` / `max_total_size_pct` still override them.
+    """
+    p = params or load_parameters()
     scout_id, picks = scout_run(
-        conn, watchlist_path=watchlist_path, batch_size=batch_size
+        conn, watchlist_path=watchlist_path, batch_size=batch_size, params=p
     )
     research_id, tickers = research_run(
         conn, data_source=data_source, scout_run_id=scout_id
@@ -67,6 +73,7 @@ def run_daily(
         conn,
         analyst_run_id=analyst_id,
         max_total_size_pct=max_total_size_pct,
+        params=p,
     )
     return DailyRunResult(
         scout_run_id=scout_id,

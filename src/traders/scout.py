@@ -13,6 +13,8 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from traders.parameters import LearnedParameters, load_parameters
+
 DEFAULT_WATCHLIST = Path(__file__).parent / "data" / "watchlist.json"
 DEFAULT_BATCH_SIZE = 10
 
@@ -61,12 +63,18 @@ def run(
     conn: sqlite3.Connection,
     watchlist_path: Path | None = None,
     run_date: date | None = None,
-    batch_size: int = DEFAULT_BATCH_SIZE,
+    batch_size: int | None = None,
+    params: LearnedParameters | None = None,
 ) -> tuple[int, list[str]]:
-    """Run the Scout: load watchlist, filter, write to `candidates`."""
+    """Run the Scout: load watchlist, filter, write to `candidates`.
+
+    ``batch_size`` overrides the learned parameter when given (tests use
+    it); otherwise it comes from the active `LearnedParameters`.
+    """
+    bs = batch_size if batch_size is not None else (params or load_parameters()).batch_size
     watchlist = load_watchlist(watchlist_path)
     rd = run_date or datetime.now(timezone.utc).date()
-    picks = filter_candidates(watchlist, rd, batch_size)
+    picks = filter_candidates(watchlist, rd, bs)
     run_id = _next_run_id(conn)
     created_at = datetime.now(timezone.utc).isoformat()
     reason = f"rotation window for {rd.isoformat()}"

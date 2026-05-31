@@ -1,0 +1,9 @@
+{
+  "name": "default",
+  "description": "Baseline goal. Edit data/strategy.json to override; this packaged file is the fallback.",
+  "target_return_pct_30d": 4.7,
+  "max_drawdown_pct": 20.0,
+  "min_hit_rate": 0.5,
+  "min_sharpe": 1.0,
+  "min_closed_for_verdict": 10
+}

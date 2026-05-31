@@ -422,6 +422,28 @@ def test_cli_run_weekly_no_positions(tmp_path, capsys):
     assert "0 post-mortem" in out
 
 
+def test_cli_metrics_empty_db(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    main(["metrics", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "Strategy scorecard" in out
+    assert "INSUFFICIENT_DATA" in out
+
+
+def test_cli_params_shows_defaults(tmp_path, capsys):
+    main(["params"])
+    out = capsys.readouterr().out
+    assert "batch_size: 10" in out
+    assert "max_total_size_pct: 20.0" in out
+
+
+def test_cli_optimize_no_proposal_on_empty_db(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    main(["optimize", "--db", str(db)])
+    out = capsys.readouterr().out
+    assert "no proposal" in out
+
+
 def test_cli_run_weekly_with_closed_position(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     wl = tmp_path / "wl.json"

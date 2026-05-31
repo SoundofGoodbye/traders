@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–13 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–16 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -101,8 +101,34 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - Tests cover the POST handlers (happy path + CSRF rejection) and assert the resulting `positions` row matches what the CLI would have written for the same input.
 - No schema changes, no new dependencies beyond Slice 11's `web` extra.
 
+## Slice 14 — Strategy goal + scorer
+
+- Closes the "well-defined goal" gap: success and failure become numbers, not vibes.
+- `traders.strategy` loads a `StrategyGoal` (target 30-day return, max drawdown, min hit-rate, min Sharpe proxy, min-closed-for-verdict). Layered load: operator override at `data/strategy.json` wins, else the packaged `strategy.default.json`. JSON not YAML — the core install has zero dependencies.
+- `traders.metrics` computes realized metrics over closed positions (trailing-30d return, max drawdown, hit rate, per-trade Sharpe proxy) and scores them criterion-by-criterion into a `ScoreCard` with verdict `on_track` / `failing` / `insufficient_data`. Pure functions; one SELECT, no mutation.
+- `sharpe_per_trade` is mean(PnL)/stdev(PnL) across closed trades — a proxy, explicitly **not** an annualized Sharpe ratio.
+- `traders metrics` CLI subcommand renders the scorecard via `reports.render_metrics` (`--format {text,markdown}`, `--output PATH`), mirroring `pm` / `review`.
+- No schema changes, no new dependencies.
+
+## Slice 15 — Tunable parameters
+
+- Externalizes the agent knobs that were hardcoded so a later optimizer can tune them without code edits.
+- `traders.parameters` loads `LearnedParameters` — scoped to the knobs that actually exist in the pipeline today: Scout's `batch_size` and the PM's `max_total_size_pct`. (The Analyst has no numeric knob of its own yet; its conviction/sizing come from the thesis generator. More knobs slot in as real generators/signals land.) Same layered load as the goal: `data/learned_parameters.json` override wins, else the packaged `parameters.default.json`, whose values equal the previous in-code defaults so behavior is unchanged.
+- Scout / Portfolio / the orchestrator accept an optional `params` argument and fall back to `load_parameters()` when neither it nor an explicit value is given; explicit `batch_size` / `max_total_size_pct` still override. CLI defaults became `None` so the learned values flow through `run-daily`.
+- `traders params` CLI subcommand prints the active parameters.
+- No schema changes, no new dependencies.
+
+## Slice 16 — Self-improvement loop (Optimizer)
+
+- Closes the loop the video is really about: read outcomes, propose **one** change, gate it behind human approval, keep an auditable trail.
+- Migration `005_experiments.sql` adds an append-only `experiments` table (hypothesis, param, old/new value, baseline verdict + metrics JSON, status `proposed`/`applied`/`rejected`, timestamps).
+- `traders.optimizer` scores the current strategy (slice 14), and if not already `on_track`, an `Optimizer` (stub v1, protocol-pluggable like `PostMortemGenerator`) proposes a single-variable change to `learned_parameters.json` following the scientific method — the failing criterion picks the knob. The proposal is **logged only**; nothing mutates parameters.
+- `traders optimize` lists/creates proposals (read-only by default); `traders optimize --apply N` writes the one approved change to `data/learned_parameters.json` and marks the experiment `applied`; `--reject N` marks it `rejected`. Human-in-the-loop, paper-only, exactly like the video's "first cycle is review-only, flip to live when ready."
+- No new dependencies.
+
 ## Future
 
+- **Backtest harness** — the missing piece that makes slice 16 meaningful. Live paper-trading yields a handful of closed positions per week, far too sparse to converge one-variable-at-a-time. A harness that replays a parameter set over historical prices lets the Optimizer evaluate a change against months of data in seconds. Larger lift: needs a historical price store and a deterministic replay of Scout→PM.
 - Additional data sources (FMP, Polygon, paid news APIs) behind the same `DataSource` protocol.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
 - Cross-run data caching if rate limits start mattering.

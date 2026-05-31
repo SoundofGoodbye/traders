@@ -13,6 +13,8 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from traders.parameters import LearnedParameters, load_parameters
+
 DEFAULT_MAX_TOTAL_SIZE_PCT = 20.0
 
 
@@ -200,13 +202,22 @@ def evaluate(
 def run(
     conn: sqlite3.Connection,
     analyst_run_id: int | None = None,
-    max_total_size_pct: float = DEFAULT_MAX_TOTAL_SIZE_PCT,
+    max_total_size_pct: float | None = None,
+    params: LearnedParameters | None = None,
 ) -> DailyReport:
     """Run the Portfolio Manager.
 
     Returns a `DailyReport`. If there is no analyst run yet, the report
     has `pm_run_id == 0` and empty lists; no rows are written.
+
+    ``max_total_size_pct`` overrides the learned parameter when given;
+    otherwise it comes from the active `LearnedParameters`.
     """
+    cap = (
+        max_total_size_pct
+        if max_total_size_pct is not None
+        else (params or load_parameters()).max_total_size_pct
+    )
     target = (
         analyst_run_id
         if analyst_run_id is not None
@@ -219,7 +230,7 @@ def run(
     theses = _theses_for_run(conn, target)
     positions = _open_positions(conn)
     pm_run_id = _next_run_id(conn)
-    accepted, rejected = evaluate(theses, positions, max_total_size_pct)
+    accepted, rejected = evaluate(theses, positions, cap)
     items = [*accepted, *rejected]
     if items:
         created_at = datetime.now(timezone.utc).isoformat()

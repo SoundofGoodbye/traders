@@ -22,6 +22,7 @@ from traders.reports import (
     latest_reviewer_run_id,
     load_review_for_run,
     render_daily_report_markdown,
+    render_metrics,
     render_weekly_review_markdown,
 )
 from traders.research import run as research_run
@@ -47,7 +48,12 @@ def main(argv: list[str] | None = None) -> None:
     scout = sub.add_parser("scout", help="Run the Scout agent")
     scout.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     scout.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
-    scout.add_argument("--batch-size", type=int, default=10)
+    scout.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Candidates per run (default: learned parameter)",
+    )
 
     research = sub.add_parser("research", help="Run the Researcher agent")
     research.add_argument("--db", type=Path, default=None, help="SQLite DB path")
@@ -85,8 +91,8 @@ def main(argv: list[str] | None = None) -> None:
     pm.add_argument(
         "--max-total-size-pct",
         type=float,
-        default=20.0,
-        help="Total exposure cap (%% of NAV)",
+        default=None,
+        help="Total exposure cap (%% of NAV; default: learned parameter)",
     )
     pm.add_argument(
         "--format",
@@ -126,12 +132,17 @@ def main(argv: list[str] | None = None) -> None:
     daily.add_argument(
         "--watchlist", type=Path, default=None, help="Watchlist JSON path"
     )
-    daily.add_argument("--batch-size", type=int, default=10)
+    daily.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Candidates per run (default: learned parameter)",
+    )
     daily.add_argument(
         "--max-total-size-pct",
         type=float,
-        default=20.0,
-        help="Total exposure cap (%% of NAV)",
+        default=None,
+        help="Total exposure cap (%% of NAV; default: learned parameter)",
     )
     daily.add_argument(
         "--data-source",
@@ -168,6 +179,44 @@ def main(argv: list[str] | None = None) -> None:
         type=Path,
         default=None,
         help="Write the rendered review to this path instead of stdout",
+    )
+
+    params_p = sub.add_parser(
+        "params", help="Show the active learned parameters"
+    )
+    params_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+
+    metrics_p = sub.add_parser(
+        "metrics", help="Score realized results against the strategy goal"
+    )
+    metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    metrics_p.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    metrics_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered scorecard to this path instead of stdout",
+    )
+
+    optimize_p = sub.add_parser(
+        "optimize",
+        help="Propose (review-only) or apply a single-variable strategy change",
+    )
+    optimize_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    opt_action = optimize_p.add_mutually_exclusive_group()
+    opt_action.add_argument(
+        "--apply", type=int, default=None, metavar="ID",
+        help="Apply a proposed experiment by id",
+    )
+    opt_action.add_argument(
+        "--reject", type=int, default=None, metavar="ID",
+        help="Reject a proposed experiment by id",
     )
 
     web = sub.add_parser(
@@ -358,6 +407,73 @@ def main(argv: list[str] | None = None) -> None:
                 f"reviewer run {result.reviewer_run_id}: "
                 f"{result.post_mortems_written} post-mortem(s)"
             )
+        conn.close()
+        return
+
+    if args.cmd == "params":
+        from dataclasses import asdict
+
+        from traders.parameters import load_parameters
+
+        print("active learned parameters:")
+        for name, value in asdict(load_parameters()).items():
+            print(f"  {name}: {value}")
+        return
+
+    if args.cmd == "metrics":
+        from traders.metrics import compute_and_score
+        from traders.strategy import load_strategy
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        card = compute_and_score(conn, load_strategy())
+        _emit(render_metrics(card, fmt=args.fmt), args.output)
+        conn.close()
+        return
+
+    if args.cmd == "optimize":
+        from traders.optimizer import (
+            OptimizerError,
+            apply_experiment,
+            list_experiments,
+            propose_experiment,
+            reject_experiment,
+        )
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        try:
+            if args.apply is not None:
+                exp = apply_experiment(conn, args.apply)
+                print(f"applied experiment {exp.id}: {exp.param} -> {exp.new_value}")
+            elif args.reject is not None:
+                exp = reject_experiment(conn, args.reject)
+                print(f"rejected experiment {exp.id}")
+            else:
+                exp = propose_experiment(conn)
+                if exp is None:
+                    print(
+                        "no proposal: strategy is on track or lacks enough "
+                        "closed positions to learn from"
+                    )
+                else:
+                    print(
+                        f"proposed experiment {exp.id} ({exp.status}): "
+                        f"{exp.param} {exp.old_value} -> {exp.new_value}"
+                    )
+                    print(f"  hypothesis: {exp.hypothesis}")
+                    print(
+                        f"  review-only — apply with: traders optimize --apply {exp.id}"
+                    )
+            for e in list_experiments(conn):
+                print(
+                    f"  [{e.status}] #{e.id} {e.param}: "
+                    f"{e.old_value} -> {e.new_value}"
+                )
+        except OptimizerError as e:
+            print(f"optimize error: {e}")
+            conn.close()
+            raise SystemExit(1) from e
         conn.close()
         return
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from traders.metrics import ScoreCard
 from traders.portfolio import DailyReport, ReportItem
 from traders.post_mortems import compute_pnl_pct
 
@@ -144,3 +145,44 @@ def load_review_for_run(conn: sqlite3.Connection, reviewer_run_id: int) -> list[
         )
         for r in rows
     ]
+
+
+def _fmt_value(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}"
+
+
+def render_metrics(card: ScoreCard, fmt: str = "text") -> str:
+    """Render a strategy scorecard as text or markdown."""
+    if fmt == "markdown":
+        return _metrics_markdown(card)
+    return _metrics_text(card)
+
+
+def _metrics_text(card: ScoreCard) -> str:
+    lines = [
+        f"Strategy scorecard — verdict: {card.verdict.upper()}",
+        f"  closed positions: {card.metrics.num_closed}",
+    ]
+    for c in card.criteria:
+        flag = "PASS" if c.passed else "FAIL"
+        lines.append(
+            f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}"
+        )
+    return "\n".join(lines)
+
+
+def _metrics_markdown(card: ScoreCard) -> str:
+    lines = [
+        f"# Strategy Scorecard — {card.verdict.replace('_', ' ').title()}",
+        "",
+        f"**Closed positions:** {card.metrics.num_closed}",
+        "",
+        "| Criterion | Value | Threshold | Result |",
+        "| --- | --- | --- | --- |",
+    ]
+    for c in card.criteria:
+        flag = "✅" if c.passed else "❌"
+        lines.append(
+            f"| {c.name} | {_fmt_value(c.value)} | {c.threshold:.2f} | {flag} |"
+        )
+    return "\n".join(lines)
