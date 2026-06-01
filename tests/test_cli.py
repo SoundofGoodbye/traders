@@ -614,6 +614,16 @@ def test_cli_backtest_compare_missing_experiment_exits_nonzero(tmp_path, capsys)
     assert "backtest error" in capsys.readouterr().out
 
 
+def test_cli_scout_rank_signals_falls_back_without_prices(tmp_path, capsys):
+    # --rank signals with no ingested prices falls back to rotation, hermetically.
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "2", "--rank", "signals"])
+    out = capsys.readouterr().out
+    assert "scout run 1: 2 candidate(s)" in out
+
+
 def test_cli_ingest_prices_skips_unmapped(tmp_path, capsys):
     # An unmappable ticker is skipped before any network call — fully hermetic.
     db = tmp_path / "t.db"

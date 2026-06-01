@@ -22,6 +22,7 @@ from traders.data_sources import DataSource
 from traders.parameters import LearnedParameters, load_parameters
 from traders.portfolio import DailyReport
 from traders.portfolio import run as pm_run
+from traders.prices import PriceHistory
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
 from traders.scout import run as scout_run
@@ -57,6 +58,7 @@ def run_daily(
     data_source: DataSource | None = None,
     params: LearnedParameters | None = None,
     analyst_generator: ThesisGenerator | None = None,
+    scout_history: PriceHistory | None = None,
 ) -> DailyRunResult:
     """Run Scout → Researcher → Analyst → Portfolio Manager against `conn`.
 
@@ -67,7 +69,11 @@ def run_daily(
     """
     p = params or load_parameters()
     scout_id, picks = scout_run(
-        conn, watchlist_path=watchlist_path, batch_size=batch_size, params=p
+        conn,
+        watchlist_path=watchlist_path,
+        batch_size=batch_size,
+        params=p,
+        history=scout_history,
     )
     research_id, tickers = research_run(
         conn, data_source=data_source, scout_run_id=scout_id

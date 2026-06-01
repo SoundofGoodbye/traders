@@ -54,6 +54,13 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Candidates per run (default: learned parameter)",
     )
+    scout.add_argument(
+        "--rank",
+        choices=("rotation", "signals"),
+        default="rotation",
+        help="Selection: 'rotation' (date cycle) or 'signals' (price-ranked; "
+        "needs ingested prices, falls back to rotation). Default: rotation.",
+    )
 
     research = sub.add_parser("research", help="Run the Researcher agent")
     research.add_argument("--db", type=Path, default=None, help="SQLite DB path")
@@ -163,6 +170,12 @@ def main(argv: list[str] | None = None) -> None:
         choices=("stub", "signals"),
         default="stub",
         help="Thesis generator: 'stub' or 'signals' (price-driven). Default: stub.",
+    )
+    daily.add_argument(
+        "--rank",
+        choices=("rotation", "signals"),
+        default="rotation",
+        help="Scout selection: 'rotation' or 'signals' (price-ranked). Default: rotation.",
     )
     daily.add_argument(
         "--format",
@@ -371,7 +384,17 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "scout":
         conn = connect(args.db)
         apply_migrations(conn)
-        run_id, picks = scout_run(conn, watchlist_path=args.watchlist, batch_size=args.batch_size)
+        history = None
+        if args.rank == "signals":
+            from traders.prices import load_history_from_db
+
+            history = load_history_from_db(conn)
+        run_id, picks = scout_run(
+            conn,
+            watchlist_path=args.watchlist,
+            batch_size=args.batch_size,
+            history=history,
+        )
         print(f"scout run {run_id}: {len(picks)} candidate(s)")
         for t in picks:
             print(f"  {t}")
@@ -456,6 +479,11 @@ def main(argv: list[str] | None = None) -> None:
             from traders.signals_thesis import build_signal_generator
 
             generator = build_signal_generator(conn)
+        scout_history = None
+        if args.rank == "signals":
+            from traders.prices import load_history_from_db
+
+            scout_history = load_history_from_db(conn)
         result = run_daily(
             conn,
             watchlist_path=args.watchlist,
@@ -463,6 +491,7 @@ def main(argv: list[str] | None = None) -> None:
             max_total_size_pct=args.max_total_size_pct,
             data_source=ds,
             analyst_generator=generator,
+            scout_history=scout_history,
         )
         # Markdown to stdout: keep it pipeable by suppressing step
         # summaries. In every other case (text, or markdown→file)
