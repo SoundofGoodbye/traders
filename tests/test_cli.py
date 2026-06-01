@@ -590,6 +590,29 @@ def test_cli_backtest_markdown_to_stdout(tmp_path, capsys):
     assert out.startswith("# Backtest")
 
 
+def test_cli_backtest_signals_strategy_runs(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB", "CCC"], "eurostoxx50": []}))
+    main(
+        [
+            "backtest",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--start",
+            "2024-01-01",
+            "--end",
+            "2026-03-01",
+            "--strategy",
+            "signals",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "(signals strategy)" in out
+
+
 def test_cli_backtest_compare_missing_experiment_exits_nonzero(tmp_path, capsys):
     db = tmp_path / "t.db"
     wl = tmp_path / "wl.json"

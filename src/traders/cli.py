@@ -278,6 +278,13 @@ def main(argv: list[str] | None = None) -> None:
         "--max-total-size-pct", type=float, default=None, help="Override PM exposure cap"
     )
     backtest_p.add_argument(
+        "--strategy",
+        choices=("rotation", "signals"),
+        default="rotation",
+        help="Replay the rotation+stub placeholder or the real 'signals' strategy "
+        "(needs enough price history). Default: rotation.",
+    )
+    backtest_p.add_argument(
         "--params",
         type=Path,
         default=None,
@@ -678,6 +685,7 @@ def main(argv: list[str] | None = None) -> None:
             holding_days=holding,
             rebalance_every_days=rebal,
             watchlist=watchlist,
+            use_signals=(args.strategy == "signals"),
         )
         try:
             if args.compare_experiment is not None:

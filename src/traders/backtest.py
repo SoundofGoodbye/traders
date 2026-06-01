@@ -13,10 +13,16 @@ the simulation runs entirely in memory and returns a value object.
 
 Model: walk rebalance dates from ``start`` to ``end`` stepping
 ``rebalance_every_days``. At each date close any position whose holding period
-has elapsed (at the as-of close), then run filter → generate → evaluate against
+has elapsed (at the as-of close), then select → generate → evaluate against
 the still-open sim positions and open each accepted pick at the as-of close,
 scheduling its exit ``holding_days`` later. After the window, realize whatever
 is still open. Score the realized trades with the existing goal + metrics.
+
+Selection/generation come in two modes. ``use_signals=False`` (default) replays
+the rotation Scout + the passed ``generator`` (stub by default). ``use_signals=True``
+replays the *real* signal strategy — ``scout.rank_candidates`` and
+``SignalThesisGenerator`` recomputed as-of each rebalance date — so the harness
+measures slices 20–21, not just the placeholder.
 
 Assumptions (deliberate v1 simplifications — documented, not hidden):
 
@@ -42,8 +48,9 @@ from traders.parameters import LearnedParameters, load_parameters
 from traders.portfolio import OpenPosition, ThesisRow, evaluate
 from traders.post_mortems import compute_pnl_pct
 from traders.prices import PriceHistory
-from traders.scout import filter_candidates, load_watchlist
+from traders.scout import filter_candidates, load_watchlist, rank_candidates
 from traders.signals import StubThesisGenerator, ThesisGenerator
+from traders.signals_thesis import SignalThesisGenerator
 from traders.strategy import StrategyGoal, load_strategy
 
 DEFAULT_HOLDING_DAYS = 21
@@ -80,6 +87,7 @@ class BacktestResult:
     rebalance_every_days: int
     batch_size: int
     max_total_size_pct: float
+    strategy: str
     rebalance_count: int
     num_trades: int
     skipped_no_price: int
@@ -140,14 +148,25 @@ def run_backtest(
     rebalance_every_days: int = DEFAULT_REBALANCE_DAYS,
     watchlist: list[str] | None = None,
     generator: ThesisGenerator | None = None,
+    use_signals: bool = False,
+    signal_kwargs: dict | None = None,
 ) -> BacktestResult:
-    """Replay the pipeline over ``history`` with ``params`` and score it."""
+    """Replay the pipeline over ``history`` with ``params`` and score it.
+
+    With ``use_signals=True`` the harness replays the *signal* strategy — the
+    same data-driven Scout ranking (``rank_candidates``) and ``SignalThesisGenerator``
+    the live pipeline uses, recomputed as-of each rebalance date — so a backtest
+    measures the real strategy, not the rotation+stub placeholder. The default
+    (``False``) keeps the rotation+``generator`` behaviour.
+    """
     if holding_days < 1:
         raise BacktestError(f"holding_days must be >= 1, got {holding_days}")
     if end < start:
         raise BacktestError(f"end {end} is before start {start}")
     wl = [t for t in (watchlist if watchlist is not None else load_watchlist()) if t]
-    gen: ThesisGenerator = generator or StubThesisGenerator()
+    default_gen: ThesisGenerator = generator or StubThesisGenerator()
+    skw = signal_kwargs or {}
+    strategy = "signals" if use_signals else "rotation"
 
     open_pos: dict[str, _SimPosition] = {}
     closed: list[BacktestTrade] = []
@@ -161,7 +180,12 @@ def run_backtest(
             closed.append(_realize(open_pos.pop(ticker), history))
 
         # 2. Decide — the exact live primitives, in order.
-        picks = filter_candidates(wl, today, params.batch_size)
+        if use_signals:
+            picks = rank_candidates(wl, history, today, params.batch_size)
+            gen = SignalThesisGenerator(history=history, as_of=today, **skw)
+        else:
+            picks = filter_candidates(wl, today, params.batch_size)
+            gen = default_gen
         theses: list[ThesisRow] = []
         for ticker in picks:
             for draft in gen.generate(ticker, ""):
@@ -220,6 +244,7 @@ def run_backtest(
         rebalance_every_days=rebalance_every_days,
         batch_size=params.batch_size,
         max_total_size_pct=params.max_total_size_pct,
+        strategy=strategy,
         rebalance_count=len(rebal),
         num_trades=len(closed),
         skipped_no_price=skipped,

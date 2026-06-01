@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -295,3 +295,50 @@ def test_render_backtest_comparison():
     md = render_backtest_comparison(base, cand, fmt="markdown")
     assert md.startswith("# Backtest Comparison")
     assert "Baseline" in md and "Candidate" in md
+
+
+# ---- signal strategy (slice 22) ------------------------------------------
+
+def _long_hist() -> PriceHistory:
+    """~2 years of daily closes: AAA a steady uptrend, BBB flat."""
+    start = date(2024, 1, 1)
+    aaa: list[tuple[str, float]] = []
+    bbb: list[tuple[str, float]] = []
+    day = start
+    price = 100.0
+    for _ in range(800):
+        price *= 1.004
+        aaa.append((day.isoformat(), round(price, 4)))
+        bbb.append((day.isoformat(), 100.0))
+        day += timedelta(days=1)
+    return PriceHistory(series={"AAA": tuple(aaa), "BBB": tuple(bbb)})
+
+
+LONG = _long_hist()
+WINDOW = dict(start=date(2026, 1, 1), end=date(2026, 3, 1))
+
+
+def test_signal_strategy_trades_only_signal_names():
+    r = run_backtest(
+        LONG, params=LearnedParameters(), goal=GOAL, watchlist=["AAA", "BBB"],
+        use_signals=True, **WINDOW,
+    )
+    assert r.strategy == "signals"
+    assert r.num_trades > 0
+    assert all(t.ticker == "AAA" for t in r.trades)  # BBB is flat -> no thesis
+    assert all(t.thesis_type == "momentum" for t in r.trades)
+
+
+def test_signal_strategy_is_deterministic():
+    a = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
+                     watchlist=["AAA", "BBB"], use_signals=True, **WINDOW)
+    b = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
+                     watchlist=["AAA", "BBB"], use_signals=True, **WINDOW)
+    assert a == b
+
+
+def test_rotation_strategy_also_trades_flat_name():
+    r = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
+                     watchlist=["AAA", "BBB"], use_signals=False, **WINDOW)
+    assert r.strategy == "rotation"
+    assert any(t.ticker == "BBB" for t in r.trades)  # stub gives every pick a thesis
