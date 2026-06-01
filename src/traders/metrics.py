@@ -89,7 +89,10 @@ def _max_drawdown_pct(trades: list[ClosedTrade]) -> float:
 
 
 def _return_30d(trades: list[ClosedTrade], now: datetime) -> float:
-    cutoff = (now - timedelta(days=WINDOW_DAYS_30)).isoformat()
+    # Compare on a date-only cutoff so the window is identical whether closed_at
+    # is a full timestamp (live path) or a date-only string (backtest path). A
+    # datetime cutoff would lexically exclude a date-only boundary-day close.
+    cutoff = (now - timedelta(days=WINDOW_DAYS_30)).date().isoformat()
     return sum(t.pnl_pct for t in trades if t.closed_at >= cutoff)
 
 
@@ -101,9 +104,16 @@ def _now_from(trades: list[ClosedTrade], now: datetime | None) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def compute_metrics(conn: sqlite3.Connection, now: datetime | None = None) -> Metrics:
-    """Aggregate realized metrics over all closed positions."""
-    trades = closed_trades(conn)
+def metrics_from_trades(
+    trades: list[ClosedTrade], now: datetime | None = None
+) -> Metrics:
+    """Aggregate realized metrics over an explicit, ordered trade list.
+
+    ``trades`` must be ordered oldest-close-first — ``max_drawdown_pct`` walks
+    the cumulative-PnL curve in sequence. The DB path (``compute_metrics``)
+    guarantees this with ``ORDER BY closed_at``; the backtest harness sorts
+    before calling.
+    """
     reference = _now_from(trades, now)
     pnls = [t.pnl_pct for t in trades]
     wins = sum(1 for p in pnls if p > 0)
@@ -125,6 +135,11 @@ def compute_metrics(conn: sqlite3.Connection, now: datetime | None = None) -> Me
         max_drawdown_pct=_max_drawdown_pct(trades),
         sharpe_per_trade=sharpe,
     )
+
+
+def compute_metrics(conn: sqlite3.Connection, now: datetime | None = None) -> Metrics:
+    """Aggregate realized metrics over all closed positions."""
+    return metrics_from_trades(closed_trades(conn), now)
 
 
 def score(metrics: Metrics, goal: StrategyGoal) -> ScoreCard:

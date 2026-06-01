@@ -14,3 +14,8 @@
 - **PM run** — One execution of the Portfolio Manager, identified by `pm_run_id`. Groups that run's accept/reject decisions in `pm_decisions` and backs the web UI's "Today" page.
 - **Web UI** — The optional local FastAPI + Jinja2 front end (`traders.web`, `web` extra). Read-only over agent tables; the only writes go through the feedback path.
 - **CSRF token** — Per-session token guarding the web UI's feedback form submissions (slice 13); required on every POST so a third-party page can't forge a write.
+- **Backtest harness** — `traders.backtest` (slice 17); replays a parameter set over historical prices by composing the live decision primitives. In-memory; never writes the live tables.
+- **PriceHistory** — As-of-queryable daily closes (`traders.prices`), backed by the `prices` table or a deterministic `synthetic_history`.
+- **Holding period** — `holding_days`; how long a simulated position is held before its scheduled exit.
+- **Rebalance** — A backtest step (`rebalance_every_days`) where due positions close and new picks open; the offline analogue of a daily run.
+- **BacktestResult** — The scored replay: realized metrics + scorecard + the trade list. `compare_params` / `backtest_experiment` score a baseline vs a candidate (or a slice-16 experiment's one change) over the same history.

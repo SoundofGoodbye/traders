@@ -152,3 +152,34 @@ def test_score_is_pure_given_metrics():
     goal = StrategyGoal("g", "", 5.0, 20.0, 0.5, 0.1, 4)
 
     assert score(m, goal).verdict == score(m, goal).verdict
+
+
+def test_metrics_from_trades_matches_db_path():
+    """The extracted pure aggregator reproduces the DB-backed numbers."""
+    from traders.metrics import ClosedTrade, metrics_from_trades
+
+    # Same PnL sequence as _seed_four: +10, -10, +20, -5.
+    trades = [
+        ClosedTrade("AAPL", "long", 10.0, "2025-01-10T00:00:00+00:00"),
+        ClosedTrade("MSFT", "long", -10.0, "2025-01-12T00:00:00+00:00"),
+        ClosedTrade("GOOG", "long", 20.0, "2025-01-14T00:00:00+00:00"),
+        ClosedTrade("AMZN", "long", -5.0, "2025-01-16T00:00:00+00:00"),
+    ]
+    m = metrics_from_trades(trades, now=NOW)
+
+    assert m.num_closed == 4
+    assert m.total_pnl_pct == 15.0
+    assert m.max_drawdown_pct == 10.0
+    assert m.hit_rate == 0.5
+
+
+def test_return_30d_includes_cutoff_date_for_date_only_closed_at():
+    """A date-only close (as the backtest emits) on the exact 30d boundary counts."""
+    from traders.metrics import ClosedTrade, metrics_from_trades
+
+    # NOW is 2025-01-31; 30 days earlier is 2025-01-01. The backtest stores
+    # closed_at as a date-only string — it must not be excluded at the boundary.
+    trades = [ClosedTrade("X", "long", 7.0, "2025-01-01")]
+    m = metrics_from_trades(trades, now=NOW)
+
+    assert m.return_pct_30d == 7.0

@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–16 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–17 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -126,9 +126,18 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - `traders optimize` lists/creates proposals (read-only by default); `traders optimize --apply N` writes the one approved change to `data/learned_parameters.json` and marks the experiment `applied`; `--reject N` marks it `rejected`. Human-in-the-loop, paper-only, exactly like the video's "first cycle is review-only, flip to live when ready."
 - No new dependencies.
 
+## Slice 17 — Backtest harness
+
+- Closes the gap that made slice 16 mostly theoretical: live paper-trading closes a handful of positions per week — far too sparse to converge the Optimizer one variable at a time. The harness replays a parameter set over historical prices so a change is scored against months of data in seconds.
+- `traders.backtest` composes the **pure decision primitives** the live agents already expose — `scout.filter_candidates`, the `ThesisGenerator`, `portfolio.evaluate`, `post_mortems.compute_pnl_pct`, `metrics.score` — so the simulation can't silently diverge from production. It runs entirely in memory and **never writes to the live tables**.
+- Model: walk rebalance dates (`rebalance_every_days`) from `start` to `end`; at each, close positions whose holding period elapsed (as-of close), run filter→generate→evaluate against the still-open sim positions, and open each accepted pick at the as-of close with `exit_day = today + holding_days`. Realize leftovers at the end; score the realized trades with the existing goal + metrics.
+- `traders.prices` adds a `PriceHistory` (as-of close lookup), a deterministic `synthetic_history` (hashlib-seeded — hermetic, zero-setup demos/tests), and a DB-backed store (`migrations/006_prices.sql`, `load_history_from_db` / `save_prices`). Populating the store from a real provider is deferred to the improvement plan.
+- `metrics.metrics_from_trades` is extracted as a pure aggregator so the harness reuses the exact metric math; `compute_metrics` delegates to it (behavior unchanged).
+- `compare_params` and `backtest_experiment` evaluate a slice-16 proposal — current params vs the one proposed change — over the same history, so the Optimizer's suggestions become testable against history instead of a few live trades.
+- `traders backtest` CLI: `--source {synthetic,db}`, `--start/--end`, `--holding-days`, `--rebalance-days`, param overrides, `--compare-experiment ID`, `--format {text,markdown}`, `--output`. No new dependencies (stdlib only); migration is append-only; default `uv run pytest` stays hermetic.
+
 ## Future
 
-- **Backtest harness** — the missing piece that makes slice 16 meaningful. Live paper-trading yields a handful of closed positions per week, far too sparse to converge one-variable-at-a-time. A harness that replays a parameter set over historical prices lets the Optimizer evaluate a change against months of data in seconds. Larger lift: needs a historical price store and a deterministic replay of Scout→PM.
 - Additional data sources (FMP, Polygon, paid news APIs) behind the same `DataSource` protocol.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
 - Cross-run data caching if rate limits start mattering.

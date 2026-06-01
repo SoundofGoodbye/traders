@@ -219,6 +219,65 @@ def main(argv: list[str] | None = None) -> None:
         help="Reject a proposed experiment by id",
     )
 
+    backtest_p = sub.add_parser(
+        "backtest",
+        help="Replay a parameter set over historical prices and score it",
+    )
+    backtest_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    backtest_p.add_argument(
+        "--source",
+        choices=("synthetic", "db"),
+        default="synthetic",
+        help="Price history source (default: synthetic — deterministic, no setup)",
+    )
+    backtest_p.add_argument(
+        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
+    )
+    backtest_p.add_argument(
+        "--start", type=str, default=None, help="Window start YYYY-MM-DD (default: end-180d)"
+    )
+    backtest_p.add_argument(
+        "--end", type=str, default=None, help="Window end YYYY-MM-DD (default: today)"
+    )
+    backtest_p.add_argument(
+        "--holding-days", type=int, default=None, help="Holding period per trade"
+    )
+    backtest_p.add_argument(
+        "--rebalance-days", type=int, default=None, help="Days between rebalances"
+    )
+    backtest_p.add_argument(
+        "--batch-size", type=int, default=None, help="Override Scout batch size"
+    )
+    backtest_p.add_argument(
+        "--max-total-size-pct", type=float, default=None, help="Override PM exposure cap"
+    )
+    backtest_p.add_argument(
+        "--params",
+        type=Path,
+        default=None,
+        help="Load parameters from this JSON file instead of the active learned set",
+    )
+    backtest_p.add_argument(
+        "--compare-experiment",
+        type=int,
+        default=None,
+        metavar="ID",
+        help="Compare baseline params vs the change proposed in experiment ID",
+    )
+    backtest_p.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    backtest_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the rendered result to this path instead of stdout",
+    )
+
     web = sub.add_parser(
         "web",
         help="Serve the local web UI",
@@ -472,6 +531,88 @@ def main(argv: list[str] | None = None) -> None:
                 )
         except OptimizerError as e:
             print(f"optimize error: {e}")
+            conn.close()
+            raise SystemExit(1) from e
+        conn.close()
+        return
+
+    if args.cmd == "backtest":
+        from dataclasses import replace as _replace
+        from datetime import date as _date
+        from datetime import timedelta as _timedelta
+
+        from traders.backtest import (
+            DEFAULT_HOLDING_DAYS,
+            DEFAULT_REBALANCE_DAYS,
+            BacktestError,
+            backtest_experiment,
+            run_backtest,
+        )
+        from traders.parameters import load_parameters
+        from traders.prices import load_history_from_db, synthetic_history
+        from traders.reports import render_backtest, render_backtest_comparison
+        from traders.scout import load_watchlist
+        from traders.strategy import load_strategy
+
+        end = _date.fromisoformat(args.end) if args.end else _date.today()
+        start = (
+            _date.fromisoformat(args.start)
+            if args.start
+            else end - _timedelta(days=180)
+        )
+        holding = (
+            args.holding_days if args.holding_days is not None else DEFAULT_HOLDING_DAYS
+        )
+        rebal = (
+            args.rebalance_days
+            if args.rebalance_days is not None
+            else DEFAULT_REBALANCE_DAYS
+        )
+        watchlist = load_watchlist(args.watchlist)
+        params = load_parameters(args.params)
+        if args.batch_size is not None:
+            params = _replace(params, batch_size=args.batch_size)
+        if args.max_total_size_pct is not None:
+            params = _replace(params, max_total_size_pct=args.max_total_size_pct)
+        goal = load_strategy()
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        if args.source == "db":
+            history = load_history_from_db(
+                conn, tickers=watchlist, start=start, end=end
+            )
+            if not history.tickers():
+                print(
+                    "note: the prices table is empty for this window — ingest "
+                    "historical closes first, or drop --source db to use the "
+                    "deterministic synthetic source (no data needed)."
+                )
+        else:
+            history = synthetic_history(watchlist, start, end)
+
+        common = dict(
+            goal=goal,
+            start=start,
+            end=end,
+            holding_days=holding,
+            rebalance_every_days=rebal,
+            watchlist=watchlist,
+        )
+        try:
+            if args.compare_experiment is not None:
+                baseline, candidate = backtest_experiment(
+                    conn, args.compare_experiment, history, params=params, **common
+                )
+                _emit(
+                    render_backtest_comparison(baseline, candidate, fmt=args.fmt),
+                    args.output,
+                )
+            else:
+                result = run_backtest(history, params=params, **common)
+                _emit(render_backtest(result, fmt=args.fmt), args.output)
+        except BacktestError as e:
+            print(f"backtest error: {e}")
             conn.close()
             raise SystemExit(1) from e
         conn.close()

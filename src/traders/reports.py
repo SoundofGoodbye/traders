@@ -186,3 +186,75 @@ def _metrics_markdown(card: ScoreCard) -> str:
             f"| {c.name} | {_fmt_value(c.value)} | {c.threshold:.2f} | {flag} |"
         )
     return "\n".join(lines)
+
+
+def render_backtest(result, fmt: str = "text") -> str:
+    """Render a backtest result (replay summary + scorecard) as text or markdown."""
+    if fmt == "markdown":
+        head = [
+            f"# Backtest — {result.scorecard.verdict.replace('_', ' ').title()}",
+            "",
+            f"**Window:** {result.start} → {result.end} "
+            f"({result.rebalance_count} rebalances, {result.holding_days}d hold)  ",
+            f"**Params:** batch_size={result.batch_size}, "
+            f"max_total_size_pct={result.max_total_size_pct}  ",
+            f"**Trades:** {result.num_trades} "
+            f"(entry-skipped {result.skipped_no_price}, "
+            f"unpriced {result.unpriced_trades})",
+            "",
+        ]
+        return "\n".join(head) + render_metrics(result.scorecard, "markdown") + "\n"
+    lines = [
+        f"Backtest — verdict: {result.scorecard.verdict.upper()}",
+        f"  window: {result.start} -> {result.end} "
+        f"({result.rebalance_count} rebalances, hold {result.holding_days}d)",
+        f"  params: batch_size={result.batch_size}, "
+        f"max_total_size_pct={result.max_total_size_pct}",
+        f"  trades: {result.num_trades} "
+        f"(entry-skipped {result.skipped_no_price}, "
+        f"unpriced {result.unpriced_trades})",
+    ]
+    for c in result.scorecard.criteria:
+        flag = "PASS" if c.passed else "FAIL"
+        lines.append(
+            f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}"
+        )
+    return "\n".join(lines)
+
+
+_COMPARE_ROWS = (
+    ("verdict", lambda r: r.scorecard.verdict),
+    ("trades", lambda r: r.num_trades),
+    ("return_pct_30d", lambda r: _fmt_value(r.metrics.return_pct_30d)),
+    ("total_pnl_pct", lambda r: _fmt_value(r.metrics.total_pnl_pct)),
+    ("hit_rate", lambda r: _fmt_value(r.metrics.hit_rate)),
+    ("max_drawdown_pct", lambda r: _fmt_value(r.metrics.max_drawdown_pct)),
+    ("sharpe_per_trade", lambda r: _fmt_value(r.metrics.sharpe_per_trade)),
+)
+
+
+def render_backtest_comparison(baseline, candidate, fmt: str = "text") -> str:
+    """Render a baseline-vs-candidate backtest side by side (text or markdown)."""
+    if fmt == "markdown":
+        lines = [
+            "# Backtest Comparison",
+            "",
+            f"Window {baseline.start} → {baseline.end}, "
+            f"{baseline.holding_days}d hold.",
+            "",
+            "| Metric | Baseline | Candidate |",
+            "| --- | --- | --- |",
+        ]
+        for name, getter in _COMPARE_ROWS:
+            lines.append(f"| {name} | {getter(baseline)} | {getter(candidate)} |")
+        return "\n".join(lines) + "\n"
+    lines = [
+        "Backtest comparison "
+        f"({baseline.start} -> {baseline.end}, hold {baseline.holding_days}d)",
+        f"  params: baseline batch={baseline.batch_size}/"
+        f"cap={baseline.max_total_size_pct} vs candidate batch="
+        f"{candidate.batch_size}/cap={candidate.max_total_size_pct}",
+    ]
+    for name, getter in _COMPARE_ROWS:
+        lines.append(f"  {name}: {getter(baseline)} -> {getter(candidate)}")
+    return "\n".join(lines)

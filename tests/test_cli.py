@@ -529,6 +529,77 @@ def test_cli_run_daily_logs_data_source(tmp_path, capsys):
     assert "(source: stub)" in out
 
 
+def test_cli_backtest_synthetic_runs(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB", "CCC"], "eurostoxx50": []}))
+    main(
+        [
+            "backtest",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--start",
+            "2026-01-01",
+            "--end",
+            "2026-03-31",
+            "--batch-size",
+            "2",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Backtest — verdict:" in out
+    assert "trades:" in out
+
+
+def test_cli_backtest_markdown_to_stdout(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    main(
+        [
+            "backtest",
+            "--db",
+            str(db),
+            "--watchlist",
+            str(wl),
+            "--start",
+            "2026-01-01",
+            "--end",
+            "2026-02-28",
+            "--format",
+            "markdown",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert out.startswith("# Backtest")
+
+
+def test_cli_backtest_compare_missing_experiment_exits_nonzero(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    with pytest.raises(SystemExit) as exc:
+        main(
+            [
+                "backtest",
+                "--db",
+                str(db),
+                "--watchlist",
+                str(wl),
+                "--start",
+                "2026-01-01",
+                "--end",
+                "2026-02-28",
+                "--compare-experiment",
+                "99",
+            ]
+        )
+    assert exc.value.code == 1
+    assert "backtest error" in capsys.readouterr().out
+
+
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:

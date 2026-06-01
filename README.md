@@ -11,6 +11,8 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 - **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems.
 - **Data sources** — shipped; `stub` default plus opt-in `yfinance` (news/fundamentals) and `edgar` (SEC filings).
 - **Web UI** — shipped; local FastAPI + Jinja2 read views plus feedback actions (slices 11–13).
+- **Strategy goal, metrics, parameters, optimizer** — shipped; scores realized results against a numeric goal and proposes human-gated single-variable changes (slices 14–16).
+- **Backtest harness** — shipped; replays a parameter set over historical prices to score changes offline (slice 17).
 
 ## Agents
 
@@ -33,6 +35,9 @@ uv run traders review      # Reviewer → post_mortems  (weekly)
 uv run traders run-daily   # Scout → Researcher → Analyst → PM in one shot
 uv run traders run-weekly  # Reviewer in one shot
 uv run traders web         # local web UI (needs the `web` extra)
+uv run traders metrics     # score realized results vs the strategy goal
+uv run traders optimize    # propose / apply a single-variable parameter change
+uv run traders backtest    # replay a parameter set over historical prices
 ```
 
 Each subcommand takes `--db PATH` and (where applicable) a `--*-run-id` flag to target a specific upstream run instead of the latest. `research` and `run-daily` additionally take `--data-source {stub,yfinance,edgar}` (default `stub`); see [Data sources](#data-sources) below. `pm`, `review`, `run-daily`, and `run-weekly` additionally take `--format {text,markdown}` (default `text`) and `--output PATH` to write the rendered document to a file instead of stdout:
@@ -90,6 +95,20 @@ uv run traders web --data-source yfinance          # live prices → unrealized 
 - The positions and thesis-detail pages report fills/partials/skips/sells; these call the same `traders.feedback` path as the CLI, behind a per-session CSRF token. Read-only everywhere else.
 - Binds to `127.0.0.1` (local only). The CLI feedback path keeps working unchanged.
 
+## Backtesting
+
+Live trading closes a few positions a week — too sparse to tune parameters confidently. The backtest harness replays a parameter set over historical prices and scores it against the same goal:
+
+```bash
+uv run traders backtest                                   # synthetic prices, trailing 180d
+uv run traders backtest --start 2026-01-01 --end 2026-05-31 \
+    --batch-size 12 --max-total-size-pct 24 --format markdown
+uv run traders backtest --compare-experiment 1            # baseline vs a proposal's one change
+uv run traders backtest --source db                       # use the stored `prices` table
+```
+
+It composes the same decision logic the live agents use, so results don't diverge from production; it runs in memory and never writes the live tables. `--source synthetic` (default) is deterministic and needs no data; `--source db` reads the `prices` table — populating it from a real provider is on the roadmap. `--compare-experiment ID` needs an experiment to exist first (create one with `traders optimize`). Entries fill at the decision-day close and trades are equal-weighted — see the `traders.backtest` docstring for the full list of v1 simplifications.
+
 ## Current limitations
 
 - **Stub generators in place of LLMs.** `StubThesisGenerator` and `StubPostMortemGenerator` ship today. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; real model-backed implementations drop in behind them in later slices.
@@ -106,7 +125,7 @@ uv run pytest
 
 ## Layout
 
-- `src/traders/` — package source (one module per agent plus `db`, `cli`, `signals`, `data_sources`, `post_mortems`, `feedback`, `reports`, `orchestrator`)
+- `src/traders/` — package source (one module per agent plus `db`, `cli`, `signals`, `data_sources`, `post_mortems`, `feedback`, `reports`, `orchestrator`, `strategy`, `metrics`, `parameters`, `optimizer`, `backtest`, `prices`)
 - `src/traders/web/` — FastAPI web UI (`app`, `queries`, `prices`, `csrf`, `templates/`)
 - `tests/` — pytest suite
 - `migrations/` — SQLite schema migrations, applied in order; append-only
