@@ -184,4 +184,4 @@ uv run pytest
 - `data/` — local SQLite db (gitignored)
 - `docs/` — slice plan, architecture, glossary
 
-See `docs/slices.md` for the build order and `docs/architecture.md` for the agent shape.
+See `docs/OPERATING.md` for the day-to-day runbook (what to check, how to tell if it's working), `docs/slices.md` for the build order, and `docs/architecture.md` for the agent shape.
