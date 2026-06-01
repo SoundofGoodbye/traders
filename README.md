@@ -10,7 +10,7 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 - **Portfolio Manager** — shipped; persists accept/reject decisions and renders a daily report.
 - **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems (stub by default, opt-in Claude write-up, slice 28).
 - **Data sources** — shipped; `stub` default plus opt-in `yfinance` (news/fundamentals) and `edgar` (SEC filings).
-- **Signals & prices** — shipped; pure-stdlib signals library (momentum / realized vol / mean-reversion / RSI, slice 18) plus a Stooq price ingestor (slice 19) that fills the `prices` table the ranked Scout and signal generator read.
+- **Signals & prices** — shipped; pure-stdlib signals library (momentum / realized vol / mean-reversion / RSI, slice 18). `ingest-prices` fills the `prices` table the ranked Scout and signal generator read — from **Tiingo** (split/dividend-adjusted EOD, needs a free `TIINGO_API_KEY`; default, slice 30) or **Stooq** (slice 19, now apikey-gated upstream).
 - **Fundamentals** — shipped; opt-in yfinance fundamentals ingestor (slice 25) fills a point-in-time `fundamentals` table that the slice-26 value signals (E/P, B/P, FCF/P) and earnings-proximity annotation build on, producing `value` theses from the signal generator.
 - **Web UI** — shipped; local FastAPI + Jinja2 read views plus feedback actions (slices 11–13).
 - **Strategy goal, metrics, parameters, optimizer** — shipped; scores realized results against a numeric goal and proposes human-gated single-variable changes (slices 14–16).
@@ -84,6 +84,19 @@ uv run traders research --data-source edgar             # filings from SEC EDGAR
 The default install does **not** include yfinance — keep the footprint empty unless you opt in. EDGAR uses only stdlib (`urllib` + `json`) but hard-requires `TRADERS_EDGAR_UA`. The CLI default is `--data-source stub` so existing behavior and the test suite stay hermetic.
 
 Both adapters degrade gracefully: network errors, rate limits, or missing fields produce an empty list of data points rather than raising, so a single flaky ticker can't kill the run. There is no caching layer — once per close is well within both services' tolerances.
+
+## Prices
+
+The `prices` table feeds the ranked Scout (`--rank signals`) and the signal thesis generator (`--generator signals`). Fill it with `ingest-prices`:
+
+```bash
+export TIINGO_API_KEY="..."                         # free key at https://www.tiingo.com
+uv run traders ingest-prices                        # Tiingo (default): split/div-adjusted EOD
+uv run traders ingest-prices --source stooq         # Stooq fallback (free CSV, now apikey-gated)
+uv run traders ingest-prices --ticker AAPL --ticker MSFT --since 2022-01-01
+```
+
+Tiingo is the default: clean, split/dividend-adjusted daily closes (the right input for return-based signals), 30+ years of history, ~50 symbols/hour on the free tier. It needs `TIINGO_API_KEY` and fails fast with a clear message if it's unset; the network call is stdlib-only (no extra). Its free tier is US EOD, so foreign-venue tickers (`.PA`, `.DE`, …) are skipped. Stooq remains available via `--source stooq` but now requires an apikey upstream.
 
 ## LLM theses
 

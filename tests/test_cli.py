@@ -672,10 +672,42 @@ def test_cli_scout_rank_signals_falls_back_without_prices(tmp_path, capsys):
 def test_cli_ingest_prices_skips_unmapped(tmp_path, capsys):
     # An unmappable ticker is skipped before any network call — fully hermetic.
     db = tmp_path / "t.db"
-    main(["ingest-prices", "--db", str(db), "--ticker", "FOO.ZZ"])
+    main(["ingest-prices", "--source", "stooq", "--db", str(db), "--ticker", "FOO.ZZ"])
     out = capsys.readouterr().out
     assert "0 close(s)" in out
     assert "skipped: FOO.ZZ" in out
+
+
+def test_cli_ingest_prices_tiingo_missing_token_exits_cleanly(tmp_path, monkeypatch):
+    # Default source is Tiingo, which needs a token — fail fast with a clear message.
+    monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit) as exc:
+        main(["ingest-prices", "--db", str(db), "--ticker", "AAPL"])
+    assert "TIINGO_API_KEY" in str(exc.value)
+
+
+def test_cli_ingest_prices_tiingo_writes(tmp_path, capsys, monkeypatch):
+    # Patch the real Tiingo fetcher with a canned one so the CLI path is hermetic.
+    import traders.tiingo as tiingo
+
+    csv_text = (
+        "date,close,high,low,open,volume,adjClose,adjHigh,adjLow,adjOpen,adjVolume,divCash,splitFactor\n"
+        "2026-01-02,190,191,189,190,1000,95.0,95,94,95,1000,0,1\n"
+        "2026-01-03,192,193,191,191,1100,96.0,96,95,95,1100,0,1\n"
+    )
+    monkeypatch.setattr(
+        tiingo, "_default_tiingo_fetcher", lambda start_date=None: lambda sym: csv_text
+    )
+    db = tmp_path / "t.db"
+    main(["ingest-prices", "--db", str(db), "--ticker", "AAPL", "--delay", "0"])
+    out = capsys.readouterr().out
+    assert "ingested 2 close(s)" in out
+    assert "source: tiingo" in out
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM prices WHERE ticker = 'AAPL'").fetchone()[0]
+    conn.close()
+    assert n == 2
 
 
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):

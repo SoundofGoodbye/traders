@@ -66,16 +66,19 @@ def ingest_prices(
     tickers: list[str],
     *,
     fetch_csv: Callable[[str], str] | None = None,
+    parse: Callable[[str], list[tuple[str, float]]] = parse_stooq_csv,
     since: str | None = None,
     delay_s: float = 0.0,
     symbol_map: Callable[[str], str | None] = to_stooq_symbol,
 ) -> dict[str, object]:
     """Fetch daily closes for ``tickers`` into the ``prices`` table.
 
-    Returns ``{"written": {ticker: rows}, "skipped": [ticker, ...]}``. A ticker
-    is skipped (never fatal) when it has no Stooq mapping, the fetch fails, or no
-    usable rows come back. ``delay_s`` throttles between *network* fetches (set
-    it for real Stooq runs; defaults to 0 so injected-fetcher tests stay fast).
+    Source-agnostic: ``fetch_csv``, ``parse``, and ``symbol_map`` together select
+    the provider (Stooq by default; see ``price_source``). Returns ``{"written":
+    {ticker: rows}, "skipped": [ticker, ...]}``. A ticker is skipped (never fatal)
+    when it has no mapping, the fetch fails, or no usable rows come back.
+    ``delay_s`` throttles between *network* fetches (set it for real runs;
+    defaults to 0 so injected-fetcher tests stay fast).
     """
     fetch = fetch_csv or _default_csv_fetcher()
     written: dict[str, int] = {}
@@ -94,7 +97,7 @@ def ingest_prices(
         except Exception:
             skipped.append(ticker)
             continue
-        rows = parse_stooq_csv(text)
+        rows = parse(text)
         if since is not None:
             rows = [(day, close) for day, close in rows if day >= since]
         if not rows:
@@ -103,3 +106,23 @@ def ingest_prices(
         save_prices(conn, ticker, rows)
         written[ticker] = len(rows)
     return {"written": written, "skipped": skipped}
+
+
+def price_source(
+    name: str, *, start_date: str | None = None
+) -> tuple[
+    Callable[[str], str], Callable[[str], list[tuple[str, float]]], Callable[[str], str | None]
+]:
+    """Return ``(fetch_csv, parse, symbol_map)`` for a named price source.
+
+    ``"tiingo"`` is the default real source (split/dividend-adjusted EOD; needs
+    ``TIINGO_API_KEY``). ``"stooq"`` is the original free CSV source, now
+    apikey-gated upstream. Building ``"tiingo"`` fails fast without a token.
+    """
+    if name == "stooq":
+        return _default_csv_fetcher(), parse_stooq_csv, to_stooq_symbol
+    if name == "tiingo":
+        from traders.tiingo import _default_tiingo_fetcher, parse_tiingo_csv, to_tiingo_symbol
+
+        return _default_tiingo_fetcher(start_date=start_date), parse_tiingo_csv, to_tiingo_symbol
+    raise ValueError(f"unknown price source: {name!r} (expected 'tiingo' or 'stooq')")

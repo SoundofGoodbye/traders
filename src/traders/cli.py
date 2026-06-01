@@ -523,10 +523,18 @@ def main(argv: list[str] | None = None) -> None:
 
     ingest_p = sub.add_parser(
         "ingest-prices",
-        help="Fetch daily closes into the prices table (Stooq; free, stdlib-only)",
+        help="Fetch daily closes into the prices table "
+        "(Tiingo by default — needs TIINGO_API_KEY; or Stooq)",
     )
     ingest_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     ingest_p.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
+    ingest_p.add_argument(
+        "--source",
+        choices=("tiingo", "stooq"),
+        default="tiingo",
+        help="Price source: 'tiingo' (default; split/div-adjusted EOD, needs "
+        "TIINGO_API_KEY) or 'stooq' (free CSV, now apikey-gated upstream).",
+    )
     ingest_p.add_argument(
         "--ticker",
         action="append",
@@ -541,7 +549,7 @@ def main(argv: list[str] | None = None) -> None:
         "--delay",
         type=float,
         default=1.0,
-        help="Seconds between requests (be polite to Stooq; default: 1.0)",
+        help="Seconds between requests (be polite to the provider; default: 1.0)",
     )
 
     ingest_f = sub.add_parser(
@@ -980,17 +988,33 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "ingest-prices":
-        from traders.price_ingest import ingest_prices
+        from traders.price_ingest import ingest_prices, price_source
         from traders.scout import load_watchlist
 
         conn = connect(args.db)
         apply_migrations(conn)
         tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
-        result = ingest_prices(conn, tickers, since=args.since, delay_s=args.delay)
+        try:
+            fetch_csv, parse, symbol_map = price_source(args.source, start_date=args.since)
+        except (RuntimeError, ValueError) as e:
+            conn.close()
+            raise SystemExit(str(e)) from e
+        result = ingest_prices(
+            conn,
+            tickers,
+            fetch_csv=fetch_csv,
+            parse=parse,
+            symbol_map=symbol_map,
+            since=args.since,
+            delay_s=args.delay,
+        )
         written = result["written"]
         skipped = result["skipped"]
         total = sum(written.values())
-        print(f"ingested {total} close(s) for {len(written)} ticker(s); {len(skipped)} skipped")
+        print(
+            f"ingested {total} close(s) for {len(written)} ticker(s); "
+            f"{len(skipped)} skipped (source: {args.source})"
+        )
         for ticker, n in written.items():
             print(f"  {ticker}: {n}")
         if skipped:

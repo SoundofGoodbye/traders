@@ -16,6 +16,7 @@
 - **CSRF token** — Per-session token guarding the web UI's feedback form submissions (slice 13); required on every POST so a third-party page can't forge a write.
 - **Backtest harness** — `traders.backtest` (slice 17); replays a parameter set over historical prices by composing the live decision primitives. In-memory; never writes the live tables.
 - **PriceHistory** — As-of-queryable daily closes (`traders.prices`), backed by the `prices` table or a deterministic `synthetic_history`.
+- **Price source** — A `(fetch_csv, parse, symbol_map)` triple selected by `price_ingest.price_source(name)` and fed to `ingest_prices`. `tiingo` (default, slice 30; split/dividend-adjusted EOD, needs `TIINGO_API_KEY`) or `stooq` (slice 19; free CSV, now apikey-gated upstream). The fetcher is injectable, so tests stay hermetic.
 - **Holding period** — `holding_days`; how long a simulated position is held before its scheduled exit.
 - **Rebalance** — A backtest step (`rebalance_every_days`) where due positions close and new picks open; the offline analogue of a daily run.
 - **BacktestResult** — The scored replay: realized metrics + scorecard + the trade list. `compare_params` / `backtest_experiment` score a baseline vs a candidate (or a slice-16 experiment's one change) over the same history.

@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–29 are shipped — the improvement plan is complete.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–30 are shipped.** Slices 18–29 completed the improvement plan; slice 30 adds the Tiingo price source. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -186,10 +186,14 @@ Adds fundamental signal math to `signals_lib` and wires it into the `SignalThesi
 
 ## Improvement plan: complete
 
-All data-collection / predictive-analysis slices (18–29) from [improvements.md](improvements.md) are shipped: the deterministic signal stack (18–22), backtest/optimizer rigor (23–24), fundamentals (25–26), and the LLM path (27–29). The `Future` section below lists deferred ideas, not committed work.
+All data-collection / predictive-analysis slices (18–29) from [improvements.md](improvements.md) are shipped: the deterministic signal stack (18–22), backtest/optimizer rigor (23–24), fundamentals (25–26), and the LLM path (27–29). Slice 30 below is a post-plan addition.
+
+## Slice 30 — Tiingo price source
+
+Stooq gated its free CSV endpoint (it now returns an apikey/captcha prompt instead of data), which broke the slice-19 ingestor's real-data path — it degraded gracefully (skipped every ticker, never crashed) but collected nothing. Slice 30 makes `ingest_prices` source-agnostic (an injectable `parse`, plus a `price_source(name)` selector returning `(fetch_csv, parse, symbol_map)`) and adds `traders.tiingo`: split/dividend-**adjusted** EOD closes (the right input for return-based signals) parsed from Tiingo's CSV (`adjClose`), behind the same injected-fetcher pattern so tests stay hermetic. The fetcher hard-requires `TIINGO_API_KEY` (free key; fail-fast at the boundary like the EDGAR adapter); Tiingo's free tier is US EOD so foreign-venue suffixes map to `None` (skipped). `traders ingest-prices --source {tiingo,stooq}` now defaults to `tiingo` and exits cleanly with the key hint when the token is missing. No migration, no new dependency (stdlib `urllib`+`csv`).
 
 ## Future
 
-- Additional data sources (FMP, Polygon, paid news APIs) behind the same `DataSource` protocol.
+- More data sources behind the same patterns — fundamentals/news beyond yfinance/EDGAR, or additional price providers (FMP, Polygon). The price ingestor is now multi-source (Stooq, Tiingo); adding another is a `price_source` entry.
 - HTML rendering on top of the slice 7 markdown surface, if/when wanted.
 - Cross-run data caching if rate limits start mattering.

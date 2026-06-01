@@ -6,10 +6,13 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from traders.db import apply_migrations
-from traders.price_ingest import ingest_prices, parse_stooq_csv
+from traders.price_ingest import ingest_prices, parse_stooq_csv, price_source
 from traders.prices import load_history_from_db
 from traders.stooq_symbols import to_stooq_symbol
+from traders.tiingo import parse_tiingo_csv, to_tiingo_symbol
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 
@@ -117,3 +120,52 @@ def test_ingest_since_filters_rows():
     hist = load_history_from_db(conn)
     assert hist.close_asof("AAPL", date(2026, 1, 2)) is None
     assert hist.close_asof("AAPL", date(2026, 1, 3)) == 11.5
+
+
+# ---- source-agnostic ingestion (slice 30) --------------------------------
+
+_TIINGO_CSV = (
+    "date,close,high,low,open,volume,adjClose,adjHigh,adjLow,adjOpen,adjVolume,divCash,splitFactor\n"
+    "2026-01-02,190.0,191,189,190.5,1000,95.0,95.5,94.5,95.2,1000,0.0,1.0\n"
+    "2026-01-03,192.0,193,191,191.5,1100,96.0,96.5,95.5,95.8,1100,0.0,1.0\n"
+)
+
+
+def test_ingest_with_tiingo_parser_uses_adjusted_close():
+    conn = _conn()
+    result = ingest_prices(
+        conn,
+        ["AAPL"],
+        fetch_csv=lambda _s: _TIINGO_CSV,
+        parse=parse_tiingo_csv,
+        symbol_map=to_tiingo_symbol,
+    )
+    assert result["written"] == {"AAPL": 2}
+    hist = load_history_from_db(conn)
+    assert hist.close_asof("AAPL", date(2026, 1, 3)) == 96.0  # adjClose, not close (192)
+
+
+def test_price_source_stooq():
+    fetch, parse, smap = price_source("stooq")
+    assert callable(fetch)
+    assert parse is parse_stooq_csv
+    assert smap is to_stooq_symbol
+
+
+def test_price_source_tiingo_with_token(monkeypatch):
+    monkeypatch.setenv("TIINGO_API_KEY", "env-token")
+    fetch, parse, smap = price_source("tiingo")
+    assert callable(fetch)
+    assert parse is parse_tiingo_csv
+    assert smap is to_tiingo_symbol
+
+
+def test_price_source_tiingo_requires_token(monkeypatch):
+    monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="TIINGO_API_KEY"):
+        price_source("tiingo")
+
+
+def test_price_source_unknown_raises():
+    with pytest.raises(ValueError, match="unknown price source"):
+        price_source("polygon")
