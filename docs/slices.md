@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–17 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–23 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -136,22 +136,38 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - `compare_params` and `backtest_experiment` evaluate a slice-16 proposal — current params vs the one proposed change — over the same history, so the Optimizer's suggestions become testable against history instead of a few live trades.
 - `traders backtest` CLI: `--source {synthetic,db}`, `--start/--end`, `--holding-days`, `--rebalance-days`, param overrides, `--compare-experiment ID`, `--format {text,markdown}`, `--output`. No new dependencies (stdlib only); migration is append-only; default `uv run pytest` stays hermetic.
 
-## Proposed — improvement plan (slices 18+)
+## Slice 18 — Signals library
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). The
-theme: turn the signal-free pipeline (date-rotation Scout, canned Analyst) into one
-that actually uses data, without breaking the zero-dep core or hermetic tests.
-Implemented slices below get promoted to a shipped `## Slice N` section above.
+`traders.signals_lib`: pure-stdlib, look-ahead-safe price signals (12-1 momentum, realized vol, 20-day mean-reversion z-score, Wilder RSI) plus cross-sectional `winsorize`/`zscore`. `closes_before(history, ticker, as_of)` is the single look-ahead gate. Leaf module; foundation for 20/21/22.
 
-- **Slice 18 — Signals library** (`traders.signals_lib`, CORE/hermetic): pure-stdlib, look-ahead-safe price signals (momentum, realized vol, mean-reversion z-score, RSI) + cross-sectional helpers. Foundation for 20/21/22.
-- **Slice 19 — Stooq price ingestor** (CORE/zero-dep): `urllib`+`csv` fetcher (injected in tests) + ticker→Stooq symbol map; `traders ingest-prices` fills the `prices` table.
-- **Slice 20 — `SignalThesisGenerator`** (CORE, `ThesisGenerator`): maps signals onto real `DraftThesis` fields; replaces the canned stub.
-- **Slice 21 — `RankingScout`** (CORE): ranks the watchlist by a composite signal from `prices`; falls back to date-rotation when prices are absent.
-- **Slice 22 — Backtest rigor** (CORE): in-sample/out-of-sample split, transaction-cost/slippage parameter, optional next-bar (entry-lag) fills.
-- **Slice 23 — Optimizer rigor** (CORE): OOS-improvement gate + trial-count deflation (PSR/DSR) so the optimizer can't overfit; still human-`--apply` gated.
-- **Slice 24 — Fundamentals ingestion** (`realdata`): `fundamentals` table (migration 007) + loader; fuels 25.
-- **Slice 25 — Fundamental & catalyst signals** (CORE): value/quality (Piotroski) + PEAD/earnings-proximity, wired into 18/20.
-- **Slices 26–28 — LLM path** (`llm` extra): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls + an eval harness; hermetic via an injected fake client.
+## Slice 19 — Stooq price ingestor
+
+Fills the `prices` table from Stooq — free, US+EU, stdlib-only (`urllib`+`csv`), so it stays in the zero-dep core. `stooq_symbols` maps Yahoo-style tickers (`MC.PA`→`mc.fr`, `BRK.B`→`brk-b.us`); `price_ingest` uses an injected fetcher (tests) + idempotent `save_prices`; `traders ingest-prices`. Documents the unadjusted-close/survivorship caveats.
+
+## Slice 20 — SignalThesisGenerator
+
+Replaces the canned stub behind the `ThesisGenerator` protocol: maps slice-18 signals onto real `DraftThesis` fields (momentum / mean-reversion, vol-scaled size, per-type exits), long-only, look-ahead-safe. Opt-in via `--generator signals` on `analyse` / `run-daily`.
+
+## Slice 21 — RankingScout
+
+`scout.rank_candidates` ranks the watchlist by a composite (momentum + oversold) cross-sectional signal from `prices`; `scout.run(history=...)` uses it with a rotation fallback when no name has signals. Opt-in via `--rank signals`.
+
+## Slice 22 — Signal strategy in the backtest
+
+`run_backtest(use_signals=True)` replays the real ranked-Scout + signal-thesis strategy, recomputed as-of each rebalance date, so backtests / `compare_params` / `backtest_experiment` measure slices 20–21 rather than the rotation+stub placeholder. `traders backtest --strategy signals`.
+
+## Slice 23 — Backtest realism + train/test split
+
+Per-trade transaction costs (`cost_bps`), entry-lag (next-bar) fills (`entry_lag_days`), and `split_backtest` (in-sample / out-of-sample) to expose overfitting. `traders backtest --cost-bps --entry-lag-days --oos-fraction`. The premortem's must-not-skip realism guardrails.
+
+## Proposed — remaining improvement plan
+
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). These need network data or a new optional dependency, so they sit at the boundary of what's autonomously testable offline.
+
+- **Slice 24 — Optimizer OOS gate + trial deflation** (CORE, planned): gate `optimize --apply` on out-of-sample improvement via the shipped `split_backtest`, and deflate the Sharpe proxy for the number of trials (PSR/DSR) so the optimizer can't fish. Still human-gated.
+- **Slice 25 — Fundamentals ingestion** (`realdata`, planned): `fundamentals` table (migration 007) + a yfinance/EDGAR-backed loader; fuels 26.
+- **Slice 26 — Fundamental & catalyst signals** (CORE, planned): value (E/P, B/P, FCF/P), quality (Piotroski F-score), PEAD/earnings-proximity added to `signals_lib` and wired into the Scout/Analyst.
+- **Slices 27–29 — LLM path** (`llm` extra, planned): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls (force a valid `DraftThesis`), prompt caching, and an eval harness; hermetic via an injected fake client. Treat ingested news/filings as untrusted (prompt-injection defense).
 
 ## Future
 
