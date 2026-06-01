@@ -151,6 +151,15 @@ def get_experiment(conn: sqlite3.Connection, experiment_id: int) -> Experiment |
     return _row_to_experiment(row) if row is not None else None
 
 
+def count_experiments(conn: sqlite3.Connection) -> int:
+    """Total experiments ever logged — the trial count the slice-24 gate deflates
+    the Sharpe proxy by. Every proposal is a fishing opportunity, so the cumulative
+    count (all statuses) is the conservative, honest number to deflate against.
+    """
+    row = conn.execute("SELECT COUNT(*) FROM experiments").fetchone()
+    return int(row[0]) if row else 0
+
+
 def propose_experiment(
     conn: sqlite3.Connection,
     goal: StrategyGoal | None = None,

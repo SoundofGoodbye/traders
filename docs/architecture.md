@@ -66,6 +66,15 @@ store (`migrations/006_prices.sql`), and even that is optional — a determinist
 slice-16 Optimizer proposals testable (baseline vs the one proposed change) over
 the same history.
 
+Slice 24 turns that into an **apply gate**: `gate_experiment` splits the window
+in-sample / out-of-sample, replays baseline and candidate over each half, and
+recommends applying a proposal only when the candidate beats the baseline
+*out-of-sample* **and** its per-trade Sharpe survives deflation for the number of
+proposals tried (`traders.deflated_sharpe`, a stdlib Probabilistic/Deflated Sharpe
+Ratio — more proposals raise the bar, so the optimizer can't fish). `traders
+optimize --apply` consults the gate and refuses an un-improving change unless
+`--force` is given; the human `--apply` gate and paper-only posture are unchanged.
+
 ## Decisions
 
 - **Sequential Python modules, not multi-process.** Each agent is a function (or small set of functions) invoked in order from a daily orchestrator script. No queue, no IPC, no async. v1 is small enough that this is the right call; revisit only if a single agent grows past what a single process can do in a reasonable wall-clock window.

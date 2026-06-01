@@ -36,7 +36,7 @@ uv run traders run-daily   # Scout → Researcher → Analyst → PM in one shot
 uv run traders run-weekly  # Reviewer in one shot
 uv run traders web         # local web UI (needs the `web` extra)
 uv run traders metrics     # score realized results vs the strategy goal
-uv run traders optimize    # propose / apply a single-variable parameter change
+uv run traders optimize    # propose / apply a single-variable change (apply is OOS-gated)
 uv run traders backtest    # replay a parameter set over historical prices
 ```
 
@@ -108,6 +108,8 @@ uv run traders backtest --source db                       # use the stored `pric
 ```
 
 It composes the same decision logic the live agents use, so results don't diverge from production; it runs in memory and never writes the live tables. `--source synthetic` (default) is deterministic and needs no data; `--source db` reads the `prices` table — populating it from a real provider is on the roadmap. `--compare-experiment ID` needs an experiment to exist first (create one with `traders optimize`). Entries fill at the decision-day close and trades are equal-weighted — see the `traders.backtest` docstring for the full list of v1 simplifications.
+
+The same machinery backs the **apply gate** (slice 24): `traders optimize --apply ID` now replays the proposal in-sample vs out-of-sample and applies it only if the candidate beats the baseline out-of-sample *and* its per-trade Sharpe survives deflation for the number of proposals tried (so the optimizer can't fish across many tries). It defaults to real ingested prices and prints a gate report; `--force` restores the old unconditional apply after you've reviewed why it blocked.
 
 ## Current limitations
 

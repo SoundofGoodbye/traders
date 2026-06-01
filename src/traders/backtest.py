@@ -43,6 +43,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 
+from traders.deflated_sharpe import deflated_sharpe_ratio
 from traders.metrics import ClosedTrade, Metrics, ScoreCard, metrics_from_trades, score
 from traders.parameters import LearnedParameters, load_parameters
 from traders.portfolio import OpenPosition, ThesisRow, evaluate
@@ -360,4 +361,199 @@ def backtest_experiment(
         start=start,
         end=end,
         **kwargs,
+    )
+
+
+# --- Slice 24: out-of-sample apply gate + trial deflation ------------------
+
+DEFAULT_OOS_FRACTION = 0.3
+DEFAULT_MIN_DSR = 0.95
+
+
+def _sr(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}"
+
+
+@dataclass(frozen=True)
+class GateDecision:
+    """The verdict of the out-of-sample apply gate (pure policy)."""
+
+    oos_improved: bool
+    deflated_sharpe: float | None
+    deflation_ok: bool
+    passed: bool
+    reason: str
+
+
+def decide_oos_gate(
+    baseline_oos_sharpe: float | None,
+    candidate_oos_sharpe: float | None,
+    candidate_oos_pnls: list[float],
+    *,
+    n_trials: int,
+    min_dsr: float = DEFAULT_MIN_DSR,
+) -> GateDecision:
+    """Pure gate policy over already-computed out-of-sample results.
+
+    Two conditions, both required, mapped straight onto the slice-24 premortem
+    guardrails (b) and (c):
+
+    1. **OOS improvement** — the candidate's out-of-sample per-trade Sharpe proxy
+       must strictly beat the baseline's. A relative, out-of-sample comparison is
+       far more robust to survivorship bias than any absolute claim.
+    2. **Survives deflation** — the candidate's OOS Deflated Sharpe Ratio, which
+       penalises the per-trade Sharpe for ``n_trials`` proposals tried, must clear
+       ``min_dsr``. This is what stops the optimizer fishing across many
+       proposals until one looks good on noise.
+
+    Kept separate from the backtest plumbing so the rule is unit-testable on
+    hand-built numbers.
+    """
+    oos_improved = (
+        baseline_oos_sharpe is not None
+        and candidate_oos_sharpe is not None
+        and candidate_oos_sharpe > baseline_oos_sharpe
+    )
+    dsr = deflated_sharpe_ratio(candidate_oos_pnls, n_trials)
+    deflation_ok = dsr is not None and dsr >= min_dsr
+    passed = oos_improved and deflation_ok
+
+    if passed:
+        reason = (
+            f"candidate beats baseline out-of-sample (Sharpe "
+            f"{_sr(candidate_oos_sharpe)} > {_sr(baseline_oos_sharpe)}) and its "
+            f"deflated Sharpe {_sr(dsr)} survives {n_trials} trial(s) "
+            f"(min {min_dsr:.2f})"
+        )
+        return GateDecision(oos_improved, dsr, deflation_ok, passed, reason)
+
+    problems: list[str] = []
+    if not oos_improved:
+        if baseline_oos_sharpe is None or candidate_oos_sharpe is None:
+            problems.append("too few scored out-of-sample trades to compare Sharpe")
+        else:
+            problems.append(
+                f"no out-of-sample improvement (Sharpe {_sr(candidate_oos_sharpe)} "
+                f"<= {_sr(baseline_oos_sharpe)})"
+            )
+    if not deflation_ok:
+        if dsr is None:
+            problems.append("deflated Sharpe undefined (too few out-of-sample trades)")
+        else:
+            problems.append(f"deflated Sharpe {_sr(dsr)} < {min_dsr:.2f} for {n_trials} trial(s)")
+    return GateDecision(oos_improved, dsr, deflation_ok, passed, "; ".join(problems))
+
+
+@dataclass(frozen=True)
+class ExperimentGate:
+    """OOS apply-gate result for one slice-16 proposal (slice 24).
+
+    Backtests baseline vs candidate params over the in-sample and out-of-sample
+    halves of the window and decides, via :func:`decide_oos_gate`, whether
+    applying the proposal is *recommended*. The human ``--apply`` gate is
+    unchanged — this only refuses to bless an un-forced apply that does not earn
+    its keep out-of-sample. Carries all four backtests so a reader can see the
+    in-sample → out-of-sample gap (the overfitting tell).
+    """
+
+    experiment_id: int
+    param: str
+    old_value: float
+    new_value: float
+    n_trials: int
+    oos_fraction: float
+    min_dsr: float
+    baseline_in_sample: BacktestResult
+    baseline_oos: BacktestResult
+    candidate_in_sample: BacktestResult
+    candidate_oos: BacktestResult
+    baseline_oos_sharpe: float | None
+    candidate_oos_sharpe: float | None
+    oos_improved: bool
+    deflated_sharpe: float | None
+    deflation_ok: bool
+    passed: bool
+    reason: str
+
+
+def gate_experiment(
+    conn,
+    experiment_id: int,
+    history: PriceHistory,
+    *,
+    goal: StrategyGoal | None = None,
+    start: date,
+    end: date,
+    oos_fraction: float = DEFAULT_OOS_FRACTION,
+    min_dsr: float = DEFAULT_MIN_DSR,
+    params: LearnedParameters | None = None,
+    n_trials: int | None = None,
+    **kwargs: object,
+) -> ExperimentGate:
+    """Evaluate whether a proposed experiment should be applied (slice 24).
+
+    Splits the window in-sample / out-of-sample and replays both the baseline
+    params and the candidate (baseline with the one proposed change) over each
+    half. The decision is made on the *out-of-sample* halves: the candidate must
+    beat the baseline's OOS Sharpe proxy **and** its OOS Sharpe must survive
+    deflation for ``n_trials`` — the count of experiments ever proposed (the
+    fishing budget), unless overridden. ``**kwargs`` (watchlist, holding_days,
+    use_signals, cost_bps, …) flow through to the underlying backtests.
+    """
+    from traders.optimizer import count_experiments, get_experiment
+
+    exp = get_experiment(conn, experiment_id)
+    if exp is None:
+        raise BacktestError(f"no experiment with id={experiment_id}")
+    goal = goal or load_strategy()
+    baseline = params or load_parameters()
+    candidate = replace(baseline, **{exp.param: _cast_param(exp.param, exp.new_value)})
+    trials = n_trials if n_trials is not None else max(1, count_experiments(conn))
+
+    base_in, base_oos = split_backtest(
+        history,
+        params=baseline,
+        goal=goal,
+        start=start,
+        end=end,
+        oos_fraction=oos_fraction,
+        **kwargs,
+    )
+    cand_in, cand_oos = split_backtest(
+        history,
+        params=candidate,
+        goal=goal,
+        start=start,
+        end=end,
+        oos_fraction=oos_fraction,
+        **kwargs,
+    )
+
+    cand_pnls = [t.pnl_pct for t in cand_oos.trades if t.pnl_pct is not None]
+    decision = decide_oos_gate(
+        base_oos.metrics.sharpe_per_trade,
+        cand_oos.metrics.sharpe_per_trade,
+        cand_pnls,
+        n_trials=trials,
+        min_dsr=min_dsr,
+    )
+    return ExperimentGate(
+        experiment_id=exp.id,
+        param=exp.param,
+        old_value=_cast_param(exp.param, exp.old_value),
+        new_value=_cast_param(exp.param, exp.new_value),
+        n_trials=trials,
+        oos_fraction=oos_fraction,
+        min_dsr=min_dsr,
+        baseline_in_sample=base_in,
+        baseline_oos=base_oos,
+        candidate_in_sample=cand_in,
+        candidate_oos=cand_oos,
+        baseline_oos_sharpe=base_oos.metrics.sharpe_per_trade,
+        candidate_oos_sharpe=cand_oos.metrics.sharpe_per_trade,
+        oos_improved=decision.oos_improved,
+        deflated_sharpe=decision.deflated_sharpe,
+        deflation_ok=decision.deflation_ok,
+        passed=decision.passed,
+        reason=decision.reason,
     )

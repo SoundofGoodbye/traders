@@ -696,3 +696,123 @@ def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     assert exc.value.code == 1
     out = capsys.readouterr().out
     assert "feedback error" in out
+
+
+# ---- optimize --apply OOS gate (slice 24) --------------------------------
+
+
+def _seed_proposal(db_path) -> int:
+    """Insert one pending drawdown proposal (max_total_size_pct 20 -> 16)."""
+    from traders.db import apply_migrations, connect
+    from traders.optimizer import propose_experiment
+    from traders.parameters import LearnedParameters
+    from traders.strategy import StrategyGoal
+
+    conn = connect(db_path)
+    apply_migrations(conn)
+    rows = [
+        ("AAA", 100, 110, "2025-01-10T00:00:00+00:00"),
+        ("BBB", 100, 90, "2025-01-12T00:00:00+00:00"),
+        ("CCC", 100, 120, "2025-01-14T00:00:00+00:00"),
+        ("DDD", 100, 95, "2025-01-16T00:00:00+00:00"),
+    ]
+    for ticker, entry, exit_, closed_at in rows:
+        cur = conn.execute(
+            "INSERT INTO theses (ticker, thesis_type, direction, conviction,"
+            " suggested_size_pct, created_at, status)"
+            " VALUES (?, 'momentum', 'long', 3, 5.0,"
+            " '2025-01-01T00:00:00+00:00', 'open')",
+            (ticker,),
+        )
+        conn.execute(
+            "INSERT INTO positions (thesis_id, ticker, status, size_pct,"
+            " entry_price, exit_price, opened_at, closed_at)"
+            " VALUES (?, ?, 'closed', 5.0, ?, ?, '2025-01-01T00:00:00+00:00', ?)",
+            (cur.lastrowid, ticker, entry, exit_, closed_at),
+        )
+    conn.commit()
+    # A goal where only drawdown fails -> proposes lowering the exposure cap.
+    exp = propose_experiment(
+        conn,
+        goal=StrategyGoal("g", "", 5.0, 5.0, 0.5, 0.1, 4),
+        params=LearnedParameters(),
+    )
+    conn.close()
+    assert exp is not None
+    return exp.id
+
+
+def _status(db_path, exp_id: int) -> str:
+    from traders.db import connect
+    from traders.optimizer import get_experiment
+
+    conn = connect(db_path)
+    exp = get_experiment(conn, exp_id)
+    conn.close()
+    return exp.status
+
+
+def test_cli_optimize_apply_blocked_by_gate(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
+    exp_id = _seed_proposal(db)
+    capsys.readouterr()
+    # Synthetic source with two names: the cap change can't earn its keep
+    # out-of-sample, so the gate withholds the apply.
+    main(
+        [
+            "optimize",
+            "--apply",
+            str(exp_id),
+            "--db",
+            str(db),
+            "--source",
+            "synthetic",
+            "--watchlist",
+            str(wl),
+            "--start",
+            "2026-01-01",
+            "--end",
+            "2026-04-30",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "Optimizer OOS gate" in out
+    assert "not applied" in out
+    assert "synthetic price source" in out  # the illustrative-data warning
+    assert _status(db, exp_id) == "proposed"  # untouched — gate blocked it
+
+
+def test_cli_optimize_apply_force_bypasses_gate(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    exp_id = _seed_proposal(db)
+    lp = tmp_path / "lp.json"  # hermetic params target, not the repo's
+    capsys.readouterr()
+    main(
+        [
+            "optimize",
+            "--apply",
+            str(exp_id),
+            "--db",
+            str(db),
+            "--force",
+            "--params",
+            str(lp),
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "gate bypassed via --force" in out
+    assert _status(db, exp_id) == "applied"
+    from traders.parameters import load_parameters
+
+    assert lp.exists()
+    assert load_parameters(lp).max_total_size_pct == 16.0
+
+
+def test_cli_optimize_apply_unknown_id_exits_nonzero(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit) as exc:
+        main(["optimize", "--apply", "999", "--db", str(db)])
+    assert exc.value.code == 1
+    assert "optimize error" in capsys.readouterr().out

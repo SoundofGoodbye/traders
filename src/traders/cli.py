@@ -40,6 +40,95 @@ def _emit(text: str, output: Path | None) -> None:
     print(f"wrote {output}")
 
 
+def _apply_with_gate(conn, args) -> None:
+    """Apply a proposed experiment, gated on out-of-sample improvement (slice 24).
+
+    Refuses the apply unless the candidate beats baseline out-of-sample *and* its
+    deflated Sharpe survives the number of proposals tried — unless ``--force`` is
+    given. The human ``--apply`` gate is unchanged; this only withholds the
+    recommendation, and ``--force`` restores the pre-slice-24 unconditional apply.
+    """
+    from datetime import date as _date
+    from datetime import timedelta as _timedelta
+
+    from traders.backtest import (
+        DEFAULT_MIN_DSR,
+        DEFAULT_OOS_FRACTION,
+        gate_experiment,
+    )
+    from traders.optimizer import OptimizerError, apply_experiment, get_experiment
+    from traders.parameters import load_parameters
+    from traders.prices import load_history_from_db, synthetic_history
+    from traders.reports import render_experiment_gate
+    from traders.scout import load_watchlist
+    from traders.strategy import load_strategy
+
+    if args.force:
+        exp = apply_experiment(conn, args.apply, params_path=args.params)
+        print(
+            f"applied experiment {exp.id}: {exp.param} -> {exp.new_value} "
+            "(gate bypassed via --force)"
+        )
+        return
+
+    # Fail fast on a non-proposed id before running the (potentially slow) gate.
+    exp_row = get_experiment(conn, args.apply)
+    if exp_row is None:
+        raise OptimizerError(f"no experiment with id={args.apply}")
+    if exp_row.status != "proposed":
+        raise OptimizerError(f"experiment {args.apply} is {exp_row.status}, not proposed")
+
+    end = _date.fromisoformat(args.end) if args.end else _date.today()
+    start = _date.fromisoformat(args.start) if args.start else end - _timedelta(days=365)
+    oos_fraction = args.oos_fraction if args.oos_fraction is not None else DEFAULT_OOS_FRACTION
+    min_dsr = args.min_dsr if args.min_dsr is not None else DEFAULT_MIN_DSR
+    watchlist = load_watchlist(args.watchlist)
+    baseline = (
+        load_parameters(args.params)
+        if args.params is not None and Path(args.params).exists()
+        else load_parameters()
+    )
+
+    if args.source == "db":
+        # Load all available history so signals get their pre-window lookback.
+        history = load_history_from_db(conn, tickers=watchlist)
+    else:
+        print(
+            "warning: gating on the synthetic price source — illustrative only; "
+            "do not trust this verdict for a real decision."
+        )
+        history = synthetic_history(watchlist, start - _timedelta(days=420), end)
+
+    gate_kwargs = dict(
+        goal=load_strategy(),
+        start=start,
+        end=end,
+        oos_fraction=oos_fraction,
+        min_dsr=min_dsr,
+        params=baseline,
+        watchlist=watchlist,
+        use_signals=(args.strategy == "signals"),
+    )
+    if args.holding_days is not None:
+        gate_kwargs["holding_days"] = args.holding_days
+    if args.rebalance_days is not None:
+        gate_kwargs["rebalance_every_days"] = args.rebalance_days
+
+    gate = gate_experiment(conn, args.apply, history, **gate_kwargs)
+    _emit(render_experiment_gate(gate, fmt=args.fmt), args.output)
+    if gate.passed:
+        exp = apply_experiment(conn, args.apply, params_path=args.params)
+        print(
+            f"applied experiment {exp.id}: {exp.param} -> {exp.new_value} "
+            "(passed the out-of-sample gate)"
+        )
+    else:
+        print(
+            "not applied — the proposal did not pass the out-of-sample gate. "
+            "Review the report above, then re-run with --force to override."
+        )
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="traders")
     parser.add_argument("--version", action="version", version=f"traders v{__version__}")
@@ -243,6 +332,75 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         metavar="ID",
         help="Reject a proposed experiment by id",
+    )
+    # --apply is gated on an out-of-sample backtest (slice 24); these tune it.
+    optimize_p.add_argument(
+        "--force",
+        action="store_true",
+        help="Apply without the out-of-sample gate. Use only after reviewing why the gate blocked.",
+    )
+    optimize_p.add_argument(
+        "--source",
+        choices=("db", "synthetic"),
+        default="db",
+        help="Price source for the --apply gate (default: db — real ingested "
+        "prices; 'synthetic' is illustrative only and warns).",
+    )
+    optimize_p.add_argument(
+        "--strategy",
+        choices=("rotation", "signals"),
+        default="signals",
+        help="Strategy the gate replays (default: signals — the real strategy).",
+    )
+    optimize_p.add_argument(
+        "--watchlist", type=Path, default=None, help="Watchlist JSON path for the gate"
+    )
+    optimize_p.add_argument(
+        "--start",
+        type=str,
+        default=None,
+        help="Gate window start YYYY-MM-DD (default: end-365d)",
+    )
+    optimize_p.add_argument(
+        "--end", type=str, default=None, help="Gate window end YYYY-MM-DD (default: today)"
+    )
+    optimize_p.add_argument(
+        "--holding-days", type=int, default=None, help="Holding period per trade (gate)"
+    )
+    optimize_p.add_argument(
+        "--rebalance-days", type=int, default=None, help="Days between rebalances (gate)"
+    )
+    optimize_p.add_argument(
+        "--oos-fraction",
+        type=float,
+        default=None,
+        help="Out-of-sample tail the gate decides on (default: 0.3)",
+    )
+    optimize_p.add_argument(
+        "--min-dsr",
+        type=float,
+        default=None,
+        help="Min deflated Sharpe (0-1) the candidate must clear (default: 0.95)",
+    )
+    optimize_p.add_argument(
+        "--params",
+        type=Path,
+        default=None,
+        help="Parameters JSON the gate reads as baseline and an apply writes to "
+        "(default: the active learned set)",
+    )
+    optimize_p.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Gate report format (default: text)",
+    )
+    optimize_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the gate report to this path instead of stdout",
     )
 
     backtest_p = sub.add_parser(
@@ -581,9 +739,9 @@ def main(argv: list[str] | None = None) -> None:
         return
 
     if args.cmd == "optimize":
+        from traders.backtest import BacktestError
         from traders.optimizer import (
             OptimizerError,
-            apply_experiment,
             list_experiments,
             propose_experiment,
             reject_experiment,
@@ -593,8 +751,7 @@ def main(argv: list[str] | None = None) -> None:
         apply_migrations(conn)
         try:
             if args.apply is not None:
-                exp = apply_experiment(conn, args.apply)
-                print(f"applied experiment {exp.id}: {exp.param} -> {exp.new_value}")
+                _apply_with_gate(conn, args)
             elif args.reject is not None:
                 exp = reject_experiment(conn, args.reject)
                 print(f"rejected experiment {exp.id}")
@@ -614,7 +771,7 @@ def main(argv: list[str] | None = None) -> None:
                     print(f"  review-only — apply with: traders optimize --apply {exp.id}")
             for e in list_experiments(conn):
                 print(f"  [{e.status}] #{e.id} {e.param}: {e.old_value} -> {e.new_value}")
-        except OptimizerError as e:
+        except (OptimizerError, BacktestError) as e:
             print(f"optimize error: {e}")
             conn.close()
             raise SystemExit(1) from e

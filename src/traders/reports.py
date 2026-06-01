@@ -254,3 +254,49 @@ def render_backtest_comparison(baseline, candidate, fmt: str = "text") -> str:
     for name, getter in _COMPARE_ROWS:
         lines.append(f"  {name}: {getter(baseline)} -> {getter(candidate)}")
     return "\n".join(lines)
+
+
+def render_experiment_gate(gate, fmt: str = "text") -> str:
+    """Render a slice-24 OOS apply-gate verdict as text or markdown."""
+    verdict = "PASS" if gate.passed else "BLOCK"
+    recommend = "apply recommended" if gate.passed else "apply not recommended"
+    base_is = gate.baseline_in_sample.metrics.sharpe_per_trade
+    cand_is = gate.candidate_in_sample.metrics.sharpe_per_trade
+    if fmt == "markdown":
+        oos_flag = "✅" if gate.oos_improved else "❌"
+        dsr_flag = "✅" if gate.deflation_ok else "❌"
+        lines = [
+            f"# Optimizer OOS Gate — {verdict}",
+            "",
+            f"**Experiment {gate.experiment_id}:** `{gate.param}` "
+            f"{gate.old_value} → {gate.new_value}  ",
+            f"**Trials (deflation N):** {gate.n_trials}  ",
+            f"**Decision:** {recommend}",
+            "",
+            "| Check | Value | Result |",
+            "| --- | --- | --- |",
+            f"| Out-of-sample Sharpe (candidate vs baseline) | "
+            f"{_fmt_value(gate.candidate_oos_sharpe)} vs {_fmt_value(gate.baseline_oos_sharpe)} "
+            f"| {oos_flag} |",
+            f"| Deflated Sharpe (>= {gate.min_dsr:.2f}) | "
+            f"{_fmt_value(gate.deflated_sharpe)} | {dsr_flag} |",
+            f"| In-sample Sharpe (overfit check) | "
+            f"{_fmt_value(cand_is)} vs {_fmt_value(base_is)} | — |",
+            "",
+            f"_{gate.reason}_",
+        ]
+        return "\n".join(lines) + "\n"
+    improved = "yes" if gate.oos_improved else "no"
+    survives = "yes" if gate.deflation_ok else "no"
+    lines = [
+        f"Optimizer OOS gate — verdict: {verdict} ({recommend})",
+        f"  experiment {gate.experiment_id}: {gate.param} {gate.old_value} -> {gate.new_value}",
+        f"  trials (deflation N): {gate.n_trials}",
+        f"  out-of-sample Sharpe: baseline {_fmt_value(gate.baseline_oos_sharpe)} "
+        f"-> candidate {_fmt_value(gate.candidate_oos_sharpe)}  [improved: {improved}]",
+        f"  deflated Sharpe: {_fmt_value(gate.deflated_sharpe)} "
+        f"(min {gate.min_dsr:.2f})  [survives: {survives}]",
+        f"  in-sample Sharpe: baseline {_fmt_value(base_is)} -> candidate {_fmt_value(cand_is)}",
+        f"  reason: {gate.reason}",
+    ]
+    return "\n".join(lines)

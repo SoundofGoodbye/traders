@@ -10,16 +10,23 @@ import pytest
 
 from traders.backtest import (
     BacktestError,
+    ExperimentGate,
     backtest_experiment,
     compare_params,
+    decide_oos_gate,
+    gate_experiment,
     run_backtest,
     split_backtest,
 )
 from traders.db import apply_migrations
-from traders.optimizer import propose_experiment
+from traders.optimizer import count_experiments, propose_experiment
 from traders.parameters import LearnedParameters
 from traders.prices import PriceHistory, synthetic_history
-from traders.reports import render_backtest, render_backtest_comparison
+from traders.reports import (
+    render_backtest,
+    render_backtest_comparison,
+    render_experiment_gate,
+)
 from traders.strategy import StrategyGoal
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
@@ -441,3 +448,152 @@ def test_split_backtest_rejects_bad_fraction():
             oos_fraction=1.5,
             watchlist=["AAA"],
         )
+
+
+# ---- OOS apply gate + trial deflation (slice 24) -------------------------
+
+# A goal where the seeded data fails on drawdown -> proposal lowers the
+# exposure cap (max_total_size_pct 20.0 -> 16.0), matching the optimizer tests.
+_DRAWDOWN_GOAL = StrategyGoal("g", "", 5.0, 5.0, 0.5, 0.1, 4)
+_GATE_START = date(2026, 1, 1)
+_GATE_END = date(2026, 6, 30)
+
+
+def _gate_setup():
+    """A conn with one pending drawdown proposal + a window of synthetic prices."""
+    conn = _conn()
+    _seed_failing_data(conn)
+    exp = propose_experiment(conn, goal=_DRAWDOWN_GOAL, params=LearnedParameters())
+    assert exp is not None
+    wl = ["AAA", "BBB", "CCC"]
+    hist = synthetic_history(wl, _GATE_START, _GATE_END)
+    return conn, exp, wl, hist
+
+
+# -- pure policy (decide_oos_gate) -----------------------------------------
+
+
+def test_decide_gate_passes_on_improvement_and_strong_dsr():
+    pnls = [5.0, 1.0] * 20  # clear positive edge with real dispersion
+    d = decide_oos_gate(0.2, 1.5, pnls, n_trials=1, min_dsr=0.95)
+    assert d.oos_improved and d.deflation_ok and d.passed
+
+
+def test_decide_gate_blocks_without_improvement():
+    d = decide_oos_gate(2.0, 1.5, [5.0, 1.0] * 20, n_trials=1, min_dsr=0.95)
+    assert not d.oos_improved and not d.passed
+    assert "no out-of-sample improvement" in d.reason
+
+
+def test_decide_gate_blocks_when_baseline_unscored():
+    d = decide_oos_gate(None, 1.5, [5.0, 1.0] * 20, n_trials=1, min_dsr=0.95)
+    assert not d.oos_improved and not d.passed
+    assert "too few scored" in d.reason
+
+
+def test_decide_gate_deflation_blocks_when_fished():
+    pnls = [2.0, -1.0] * 20  # soft, real edge (Sharpe ~0.33)
+    honest = decide_oos_gate(0.0, 0.33, pnls, n_trials=1, min_dsr=0.95)
+    fished = decide_oos_gate(0.0, 0.33, pnls, n_trials=500, min_dsr=0.95)
+    assert honest.passed  # one trial: the edge stands
+    assert fished.oos_improved  # the improvement is real...
+    assert not fished.deflation_ok  # ...but 500 trials deflate it away
+    assert not fished.passed
+
+
+# -- integration (gate_experiment) -----------------------------------------
+
+
+def test_gate_experiment_runs_both_halves_and_defaults_trials_from_ledger():
+    conn, exp, wl, hist = _gate_setup()
+    gate = gate_experiment(
+        conn,
+        exp.id,
+        hist,
+        goal=GOAL,
+        start=_GATE_START,
+        end=_GATE_END,
+        oos_fraction=0.3,
+        watchlist=wl,
+        holding_days=7,
+        rebalance_every_days=7,
+    )
+    assert isinstance(gate, ExperimentGate)
+    assert gate.param == "max_total_size_pct"
+    assert (gate.old_value, gate.new_value) == (20.0, 16.0)
+    assert gate.n_trials == count_experiments(conn) == 1
+    # both params replayed over the disjoint in-sample / out-of-sample halves
+    assert gate.baseline_in_sample.end < gate.baseline_oos.start
+    assert gate.candidate_in_sample.end < gate.candidate_oos.start
+    # the headline invariant: pass iff it improved OOS *and* survived deflation
+    assert gate.passed == (gate.oos_improved and gate.deflation_ok)
+
+
+def test_gate_experiment_blocks_when_min_dsr_unreachable():
+    conn, exp, wl, hist = _gate_setup()
+    gate = gate_experiment(
+        conn,
+        exp.id,
+        hist,
+        goal=GOAL,
+        start=_GATE_START,
+        end=_GATE_END,
+        min_dsr=1.01,  # no probability can clear this
+        watchlist=wl,
+        holding_days=7,
+        rebalance_every_days=7,
+    )
+    assert not gate.deflation_ok
+    assert not gate.passed
+
+
+def test_gate_experiment_trial_penalty_lowers_dsr():
+    conn, exp, wl, hist = _gate_setup()
+    kw = dict(
+        goal=GOAL,
+        start=_GATE_START,
+        end=_GATE_END,
+        watchlist=wl,
+        holding_days=7,
+        rebalance_every_days=7,
+    )
+    one = gate_experiment(conn, exp.id, hist, n_trials=1, **kw)
+    many = gate_experiment(conn, exp.id, hist, n_trials=500, **kw)
+    assert one.n_trials == 1 and many.n_trials == 500
+    assert one.deflated_sharpe is not None and many.deflated_sharpe is not None
+    assert many.deflated_sharpe <= one.deflated_sharpe  # more trials -> harder
+
+
+def test_gate_experiment_unknown_id_raises():
+    conn, _exp, wl, hist = _gate_setup()
+    with pytest.raises(BacktestError):
+        gate_experiment(
+            conn,
+            999,
+            hist,
+            goal=GOAL,
+            start=_GATE_START,
+            end=_GATE_END,
+            watchlist=wl,
+        )
+
+
+def test_render_experiment_gate_text_and_markdown():
+    conn, exp, wl, hist = _gate_setup()
+    gate = gate_experiment(
+        conn,
+        exp.id,
+        hist,
+        goal=GOAL,
+        start=_GATE_START,
+        end=_GATE_END,
+        watchlist=wl,
+        holding_days=7,
+        rebalance_every_days=7,
+    )
+    text = render_experiment_gate(gate, fmt="text")
+    assert "Optimizer OOS gate — verdict:" in text
+    assert "deflated Sharpe:" in text
+    md = render_experiment_gate(gate, fmt="markdown")
+    assert md.startswith("# Optimizer OOS Gate")
+    assert "Deflated Sharpe" in md

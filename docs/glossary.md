@@ -19,3 +19,5 @@
 - **Holding period** — `holding_days`; how long a simulated position is held before its scheduled exit.
 - **Rebalance** — A backtest step (`rebalance_every_days`) where due positions close and new picks open; the offline analogue of a daily run.
 - **BacktestResult** — The scored replay: realized metrics + scorecard + the trade list. `compare_params` / `backtest_experiment` score a baseline vs a candidate (or a slice-16 experiment's one change) over the same history.
+- **OOS gate** — Slice-24 guard on `optimize --apply`: `gate_experiment` recommends a proposal only if the candidate beats the baseline **out-of-sample** *and* clears a minimum Deflated Sharpe Ratio. `--force` bypasses it; the human `--apply` gate stays.
+- **Deflated Sharpe Ratio (DSR)** — `traders.deflated_sharpe`; the per-trade Sharpe proxy's confidence after correcting for sample size and the number of proposals tried (`count_experiments`). More trials raise the benchmark (`expected_max_sharpe`), lowering the DSR — the anti-fishing brake. A relative guardrail, not an annualized Sharpe.

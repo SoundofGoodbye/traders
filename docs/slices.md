@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–23 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–24 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -160,11 +160,14 @@ Replaces the canned stub behind the `ThesisGenerator` protocol: maps slice-18 si
 
 Per-trade transaction costs (`cost_bps`), entry-lag (next-bar) fills (`entry_lag_days`), and `split_backtest` (in-sample / out-of-sample) to expose overfitting. `traders backtest --cost-bps --entry-lag-days --oos-fraction`. The premortem's must-not-skip realism guardrails.
 
+## Slice 24 — Optimizer OOS gate + trial deflation
+
+Gates `optimize --apply` on an **out-of-sample** backtest so the slice-16 Optimizer can't bless a change that only looks good in-sample. `backtest.gate_experiment` runs `split_backtest` for the baseline and the candidate (baseline + the one proposed change) and applies a two-part rule (`decide_oos_gate`): the candidate must (1) beat the baseline's out-of-sample per-trade Sharpe proxy **and** (2) clear a minimum **Deflated Sharpe Ratio** for the number of proposals tried. `traders.deflated_sharpe` (pure stdlib, `statistics.NormalDist`) implements the Probabilistic / Deflated Sharpe Ratio (Bailey & López de Prado): `expected_max_sharpe` is the multiple-testing benchmark the proxy must clear, so more proposals (`optimizer.count_experiments`) raise the bar — the optimizer can't fish. `traders optimize --apply` now refuses an un-improving proposal (printing a gate report); `--force` restores the old unconditional apply, and `--source/--strategy/--start/--end/--oos-fraction/--min-dsr/--params/--format/--output` tune it. Defaults to real ingested prices (`--source db`) and warns when gating on the synthetic source. The human `--apply` gate is unchanged; no migration, no new dependencies.
+
 ## Proposed — remaining improvement plan
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). These need network data or a new optional dependency, so they sit at the boundary of what's autonomously testable offline.
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). These mostly need network data or a new optional dependency (slice 26 is the offline exception, but it builds on slice 25's data), so they sit at the boundary of what's autonomously testable offline.
 
-- **Slice 24 — Optimizer OOS gate + trial deflation** (CORE, planned): gate `optimize --apply` on out-of-sample improvement via the shipped `split_backtest`, and deflate the Sharpe proxy for the number of trials (PSR/DSR) so the optimizer can't fish. Still human-gated.
 - **Slice 25 — Fundamentals ingestion** (`realdata`, planned): `fundamentals` table (migration 007) + a yfinance/EDGAR-backed loader; fuels 26.
 - **Slice 26 — Fundamental & catalyst signals** (CORE, planned): value (E/P, B/P, FCF/P), quality (Piotroski F-score), PEAD/earnings-proximity added to `signals_lib` and wired into the Scout/Analyst.
 - **Slices 27–29 — LLM path** (`llm` extra, planned): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls (force a valid `DraftThesis`), prompt caching, and an eval harness; hermetic via an injected fake client. Treat ingested news/filings as untrusted (prompt-injection defense).
