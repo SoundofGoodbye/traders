@@ -136,6 +136,23 @@ The build plan for `traders`. Each slice is a self-contained increment — propo
 - `compare_params` and `backtest_experiment` evaluate a slice-16 proposal — current params vs the one proposed change — over the same history, so the Optimizer's suggestions become testable against history instead of a few live trades.
 - `traders backtest` CLI: `--source {synthetic,db}`, `--start/--end`, `--holding-days`, `--rebalance-days`, param overrides, `--compare-experiment ID`, `--format {text,markdown}`, `--output`. No new dependencies (stdlib only); migration is append-only; default `uv run pytest` stays hermetic.
 
+## Proposed — improvement plan (slices 18+)
+
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). The
+theme: turn the signal-free pipeline (date-rotation Scout, canned Analyst) into one
+that actually uses data, without breaking the zero-dep core or hermetic tests.
+Implemented slices below get promoted to a shipped `## Slice N` section above.
+
+- **Slice 18 — Signals library** (`traders.signals_lib`, CORE/hermetic): pure-stdlib, look-ahead-safe price signals (momentum, realized vol, mean-reversion z-score, RSI) + cross-sectional helpers. Foundation for 20/21/22.
+- **Slice 19 — Stooq price ingestor** (CORE/zero-dep): `urllib`+`csv` fetcher (injected in tests) + ticker→Stooq symbol map; `traders ingest-prices` fills the `prices` table.
+- **Slice 20 — `SignalThesisGenerator`** (CORE, `ThesisGenerator`): maps signals onto real `DraftThesis` fields; replaces the canned stub.
+- **Slice 21 — `RankingScout`** (CORE): ranks the watchlist by a composite signal from `prices`; falls back to date-rotation when prices are absent.
+- **Slice 22 — Backtest rigor** (CORE): in-sample/out-of-sample split, transaction-cost/slippage parameter, optional next-bar (entry-lag) fills.
+- **Slice 23 — Optimizer rigor** (CORE): OOS-improvement gate + trial-count deflation (PSR/DSR) so the optimizer can't overfit; still human-`--apply` gated.
+- **Slice 24 — Fundamentals ingestion** (`realdata`): `fundamentals` table (migration 007) + loader; fuels 25.
+- **Slice 25 — Fundamental & catalyst signals** (CORE): value/quality (Piotroski) + PEAD/earnings-proximity, wired into 18/20.
+- **Slices 26–28 — LLM path** (`llm` extra): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls + an eval harness; hermetic via an injected fake client.
+
 ## Future
 
 - Additional data sources (FMP, Polygon, paid news APIs) behind the same `DataSource` protocol.
