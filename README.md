@@ -131,7 +131,7 @@ A local, server-rendered FastAPI + Jinja2 UI lives behind the `web` extra:
 
 ```bash
 uv sync --extra web
-uv run traders web --db data/traders.db            # http://127.0.0.1:8000
+uv run traders web --db data/traders.db            # http://127.0.0.1:8420
 uv run traders web --data-source yfinance          # live prices → unrealized P&L
 ```
 

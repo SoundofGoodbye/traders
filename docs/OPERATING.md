@@ -22,7 +22,7 @@ A cron job (`scripts/daily-run.sh`, 08:00 weekdays) does this automatically:
 
 Your 30-second check each morning:
 
-- Open the UI's **Jobs** page (`http://127.0.0.1:8000/jobs`) or `tail data/cron.log`.
+- Open the UI's **Jobs** page (`http://127.0.0.1:8420/jobs`) or `tail data/cron.log`.
   Confirm the run happened and ended `[ok]` (not `[warn]`/`[error]`/`[skip]`).
 - Open **Today** (`/`): do the picks make sense? Are prices fresh
   (`traders metrics` / the latest `prices.day` should be the last trading day)?
@@ -108,6 +108,12 @@ All under the repo root; secrets/state are gitignored.
   crontab entry stays installed. `traders jobs status` prints the current state.
 - **Schedule:** `crontab -e` (entries are tagged `# traders-daily` /
   `# traders-weekly`). systemd keeps cron running across WSL restarts.
+- **Web UI:** runs as a user systemd service on `http://127.0.0.1:8420`
+  (unit at `~/.config/systemd/user/traders-web.service`). Control it with
+  `systemctl --user {status,restart,stop,disable} traders-web`; tail logs with
+  `journalctl --user -u traders-web -f`. It autostarts on login; run
+  `loginctl enable-linger marti` once to also keep it up across logout / at boot.
+  (The port lives in the unit's `ExecStart` and in `traders web --port`.)
 
 ## Troubleshooting
 
@@ -152,5 +158,5 @@ uv run traders jobs status
 uv run traders jobs disable daily        # or enable
 
 # UI
-uv run traders web                       # http://127.0.0.1:8000
+uv run traders web                       # http://127.0.0.1:8420
 ```

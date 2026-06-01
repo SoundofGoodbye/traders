@@ -640,7 +640,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     web.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     web.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
-    web.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    web.add_argument("--port", type=int, default=8420, help="Bind port (default: 8420)")
     web.add_argument(
         "--data-source",
         dest="data_source",
