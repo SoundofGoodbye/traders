@@ -27,7 +27,7 @@ from fastapi.templating import Jinja2Templates
 from traders import feedback, jobs
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
-from traders.web import csrf, queries
+from traders.web import csrf, explain, queries
 from traders.web.prices import PriceFn
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -53,6 +53,8 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     startup.close()
 
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+    # Display helper: drop the `[signal]`/`[llm]` source tag from rationale text.
+    templates.env.globals["strip_tag"] = explain.strip_tag
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)
     # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
     # otherwise a fresh per-process secret is fine for a single-user tool.
@@ -132,6 +134,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
                 "accepted": [p for p in picks if p.decision == "accepted"],
                 "rejected": [p for p in picks if p.decision == "rejected"],
                 "candidates": candidates,
+                "explanations": {p.thesis.id: explain.explain_thesis(p.thesis) for p in picks},
             },
         )
 
@@ -196,12 +199,16 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
         thesis = queries.thesis_by_id(conn, thesis_id)
         if thesis is None:
             raise HTTPException(status_code=404, detail=f"no thesis {thesis_id}")
+        notes = queries.notes_for_thesis(conn, thesis)
         return render_with_csrf(
             request,
             "thesis_detail.html",
             {
                 "thesis": thesis,
-                "notes": queries.notes_for_thesis(conn, thesis),
+                "explanation": explain.explain_thesis(thesis),
+                "note_views": [
+                    {"note": n, "sections": explain.parse_research_note(n.content)} for n in notes
+                ],
                 "backlinks": queries.backlinks_for_thesis(conn, thesis_id),
                 "has_open_position": queries.open_position_for_thesis(conn, thesis_id) is not None,
             },

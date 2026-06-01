@@ -12,15 +12,20 @@
     {% if accepted %}
       {% for pick in accepted %}
         {% set t = pick.thesis %}
+        {% set ex = explanations[t.id] %}
         <article class="card">
           <div class="row">
-            <span><span class="ticker">{{ t.ticker }}</span>
+            <span><a class="link ticker" href="/theses/{{ t.id }}">{{ t.ticker }}</a>
               <span class="tag {{ t.direction }}">{{ t.direction }}</span>
               <span class="tag">{{ t.thesis_type }}</span></span>
             <span class="meta">conviction {{ t.conviction }} · size {{ "%.1f"|format(t.suggested_size_pct) }}%</span>
           </div>
-          {% if t.rationale %}<p class="rationale">{{ t.rationale }}</p>{% endif %}
-          {% if t.exit_condition %}<p class="meta">Exit: {{ t.exit_condition }}</p>{% endif %}
+          <div class="explain">
+            <p class="lead">{{ ex.strategy }}</p>
+            <p class="sell"><b>{{ ex.sell_when }}</b></p>
+            {% if ex.earnings_warning %}<p class="warn">⚠ {{ ex.earnings_warning }}</p>{% endif %}
+          </div>
+          <p class="meta"><a class="link" href="/theses/{{ t.id }}">Full breakdown &amp; how to record a buy →</a></p>
         </article>
       {% endfor %}
     {% else %}
@@ -33,12 +38,12 @@
         {% set t = pick.thesis %}
         <article class="card">
           <div class="row">
-            <span><span class="ticker">{{ t.ticker }}</span>
+            <span><a class="link ticker" href="/theses/{{ t.id }}">{{ t.ticker }}</a>
               <span class="tag {{ t.direction }}">{{ t.direction }}</span>
               <span class="tag">{{ t.thesis_type }}</span></span>
             <span class="meta">conviction {{ t.conviction }}</span>
           </div>
-          {% if pick.reason %}<p class="meta">{{ pick.reason }}</p>{% endif %}
+          {% if pick.reason %}<p class="meta">Why it didn't make the cut: {{ pick.reason }}</p>{% endif %}
         </article>
       {% endfor %}
     {% endif %}

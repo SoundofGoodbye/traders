@@ -13,8 +13,20 @@
     <div class="row">
       <span class="meta">conviction {{ thesis.conviction }} · suggested size {{ "%.1f"|format(thesis.suggested_size_pct) }}%</span>
     </div>
-    {% if thesis.rationale %}<p class="rationale">{{ thesis.rationale }}</p>{% endif %}
+    {% if thesis.rationale %}<p class="rationale">{{ strip_tag(thesis.rationale) }}</p>{% endif %}
     {% if thesis.exit_condition %}<p class="meta">Exit: {{ thesis.exit_condition }}</p>{% endif %}
+
+    <div class="explain">
+      <p class="explain-label">What this means</p>
+      <p class="lead">{{ explanation.strategy }}</p>
+      <p class="sell"><b>{{ explanation.sell_when }}</b></p>
+      {% if explanation.earnings_warning %}<p class="warn">⚠ {{ explanation.earnings_warning }}</p>{% endif %}
+    </div>
+    {% if explanation.glossary %}
+      <ul class="glossary">
+        {% for g in explanation.glossary %}<li><b>{{ g.term }}</b> — {{ g.definition }}</li>{% endfor %}
+      </ul>
+    {% endif %}
   </article>
 
   <h2>Report execution</h2>
@@ -58,13 +70,32 @@
   {% endif %}
 
   <h2>Research notes</h2>
-  {% if notes %}
-    {% for n in notes %}
+  <p class="sub">Background the Researcher pulled on this company, grouped with plain-English labels.</p>
+  {% if note_views %}
+    {% for nv in note_views %}
+      {% set n = nv.note %}
       <article class="card">
         <div class="row">
           <span class="meta">Research run #{{ n.run_id }} · {{ n.created_at[:10] }}</span>
         </div>
-        <p class="pre">{{ n.content }}</p>
+        {% if nv.sections %}
+          {% for s in nv.sections %}
+            <div class="note-section">
+              <h3>{{ s.heading }}</h3>
+              {% if s.intro %}<p class="note-intro">{{ s.intro }}</p>{% endif %}
+              <ul>
+                {% for it in s.items %}
+                  <li>
+                    {%- if it.title %}<b>{{ it.title }}</b>{% if it.date %} <span class="meta">({{ it.date }})</span>{% endif %}{% if it.text %} — {{ it.text }}{% endif %}
+                    {%- else %}{{ it.text }}{% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p class="empty">No readable detail in this note.</p>
+        {% endif %}
         {% if n.sources %}
           <p class="meta">Sources:</p>
           <ul>

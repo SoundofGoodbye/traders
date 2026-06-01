@@ -133,6 +133,30 @@ def test_thesis_detail_route_ok_and_404(tmp_path):
     assert client.get("/theses/999999").status_code == 404
 
 
+def test_thesis_detail_renders_plain_english_layer(tmp_path):
+    db_path = tmp_path / "t.db"
+    thesis_id = _seed_path(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    text = client.get(f"/theses/{thesis_id}").text
+    # plain-English explainer + glossary + friendly research-note labels
+    assert "What this means" in text
+    assert "Mean-reversion" in text  # glossary term for the stub thesis
+    assert "Company financials" in text  # friendly label for the fundamentals note
+    # the machine source tag is stripped from the displayed rationale line
+    assert "Baseline mean-reversion thesis" in text
+    assert "[stub] Baseline" not in text
+
+
+def test_today_route_explains_accepted_picks(tmp_path):
+    db_path = tmp_path / "t.db"
+    _seed_path(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    text = client.get("/").text
+    # an accepted pick carries the plain-English explainer and links into detail
+    assert "Full breakdown" in text
+    assert 'href="/theses/' in text
+
+
 def test_thesis_detail_hides_fill_form_when_position_open(tmp_path):
     # _seed_path closes its position; seed a fresh thesis and leave it OPEN so
     # the has_open_position=True branch of the detail route is exercised.
