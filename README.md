@@ -4,21 +4,23 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 
 ## Status
 
-- **Scout** — shipped; date-seeded rotation over the watchlist.
-- **Researcher** — shipped; stub data source by default, opt-in yfinance adapter.
-- **Analyst** — shipped; stub thesis generator behind a stable protocol.
+- **Scout** — shipped; date-seeded rotation by default, opt-in price-signal ranking (slice 21).
+- **Researcher** — shipped; stub data source by default, opt-in yfinance/EDGAR adapters.
+- **Analyst** — shipped; stub thesis generator by default, opt-in signal-driven generator (slice 20), both behind a stable protocol.
 - **Portfolio Manager** — shipped; persists accept/reject decisions and renders a daily report.
 - **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems.
 - **Data sources** — shipped; `stub` default plus opt-in `yfinance` (news/fundamentals) and `edgar` (SEC filings).
+- **Signals & prices** — shipped; pure-stdlib signals library (momentum / realized vol / mean-reversion / RSI, slice 18) plus a Stooq price ingestor (slice 19) that fills the `prices` table the ranked Scout and signal generator read.
 - **Web UI** — shipped; local FastAPI + Jinja2 read views plus feedback actions (slices 11–13).
 - **Strategy goal, metrics, parameters, optimizer** — shipped; scores realized results against a numeric goal and proposes human-gated single-variable changes (slices 14–16).
-- **Backtest harness** — shipped; replays a parameter set over historical prices to score changes offline (slice 17).
+- **Backtest harness** — shipped; replays a parameter set — rotation+stub or the real signal strategy — over historical prices with transaction costs, next-bar fills, and an in-sample/out-of-sample split (slices 17, 22–23).
+- **Optimizer OOS gate** — shipped; `optimize --apply` is gated on out-of-sample improvement and Sharpe trial-deflation so the optimizer can't fish (slice 24).
 
 ## Agents
 
-- **Scout** — filters the watchlist down to a small daily candidate set. Deterministic date-seeded rotation today; data-driven later.
+- **Scout** — filters the watchlist down to a small daily candidate set. Date-seeded rotation by default; opt-in price-signal ranking (`--rank signals`) once prices are ingested.
 - **Researcher** — per-candidate digest of filings, news, fundamentals into `research_notes` with cited sources.
-- **Analyst** — turns each note into zero-or-more theses (type, direction, conviction, suggested size, exit condition).
+- **Analyst** — turns each note into zero-or-more theses (type, direction, conviction, suggested size, exit condition). Stub generator by default; opt-in signal-driven generator (`--generator signals`).
 - **Portfolio Manager** — final filter over the day's theses against open positions; persists per-thesis accept/reject decisions and emits a daily summary.
 - **Reviewer** (weekly) — walks closed positions and writes post-mortems.
 
@@ -113,8 +115,9 @@ The same machinery backs the **apply gate** (slice 24): `traders optimize --appl
 
 ## Current limitations
 
-- **Stub generators in place of LLMs.** `StubThesisGenerator` and `StubPostMortemGenerator` ship today. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; real model-backed implementations drop in behind them in later slices.
-- **Scout heuristic is a date rotation**, not a data-driven filter. Real signals will arrive once Scout is rewired to consume from a `DataSource` itself (a follow-up slice — Researcher is the first consumer today).
+- **No LLM generators yet.** Deterministic generators ship today — `StubThesisGenerator`, the slice-20 `SignalThesisGenerator` (price-driven), and `StubPostMortemGenerator`. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; model-backed implementations drop in behind them in slices 27–29.
+- **Signals are price-only.** The slice-18 library and the ranked Scout / signal generator work off ingested closes. Fundamental and catalyst signals (value, quality, earnings proximity) need a `fundamentals` table first — slices 25–26.
+- **Scout defaults to date rotation.** Price-signal ranking is opt-in (`--rank signals`) and falls back to rotation when no prices are ingested, so the zero-data path still works.
 - **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing (post-close daily, weekly review) is left to the operator — wire them to cron, systemd timers, or whatever the host runs.
 - **No caching across runs.** Real data comes from yfinance and SEC EDGAR today; FMP, Polygon, and paid news APIs are future slices. No cross-run cache yet — if rate limits start to bite, that's the trigger to add one.
 
