@@ -955,3 +955,83 @@ def test_cli_review_llm_generator(tmp_path, capsys, monkeypatch):
     lessons = conn.execute("SELECT lessons FROM post_mortems").fetchone()[0]
     conn.close()
     assert lessons.startswith("[llm]")
+
+
+# ---- eval-llm + missing-extra polish (slice 29) --------------------------
+
+
+def _patch_llm_clients(monkeypatch, thesis_input, pm_input):
+    from types import SimpleNamespace
+
+    import traders.llm_postmortem as llm_pm
+    import traders.llm_thesis as llm_thesis
+
+    def _resolver(tool_input):
+        def fake(self):
+            def create(**kwargs):
+                block = SimpleNamespace(type="tool_use", input=tool_input)
+                return SimpleNamespace(content=[block])
+
+            return SimpleNamespace(messages=SimpleNamespace(create=create))
+
+        return fake
+
+    monkeypatch.setattr(llm_thesis.LLMThesisGenerator, "_resolve_client", _resolver(thesis_input))
+    monkeypatch.setattr(llm_pm.LLMPostMortemGenerator, "_resolve_client", _resolver(pm_input))
+
+
+_THESIS_INPUT = {
+    "actionable": True,
+    "thesis_type": "value",
+    "direction": "long",
+    "conviction": 4,
+    "suggested_size_pct": 3.0,
+    "exit_condition": "re-rate to peers",
+    "rationale": "cheap on cash flow and assets",
+}
+_PM_INPUT = {"outcome": "WIN ran up and LOSS faded, as scored.", "lessons": "size winners larger"}
+
+
+def test_cli_eval_llm_runs(capsys, monkeypatch):
+    _patch_llm_clients(monkeypatch, _THESIS_INPUT, _PM_INPUT)
+    main(["eval-llm", "--generator", "both"])
+    out = capsys.readouterr().out
+    assert "LLM eval" in out
+    assert "thesis generator" in out
+    assert "post-mortem generator" in out
+
+
+def test_cli_eval_llm_min_pass_rate_gate(capsys, monkeypatch):
+    # The thesis fake answers every case with a thesis, so the "decline" golden
+    # case fails -> pass rate < 1.0 -> the 1.0 gate exits non-zero.
+    _patch_llm_clients(monkeypatch, _THESIS_INPUT, _PM_INPUT)
+    with pytest.raises(SystemExit) as exc:
+        main(["eval-llm", "--generator", "thesis", "--min-pass-rate", "1.0"])
+    assert exc.value.code == 1
+    assert "below threshold" in capsys.readouterr().out
+
+
+def test_cli_eval_llm_missing_extra_exits_cleanly():
+    import importlib.util
+
+    if importlib.util.find_spec("anthropic") is not None:
+        pytest.skip("anthropic installed — missing-extra path can't be exercised")
+    with pytest.raises(SystemExit) as exc:
+        main(["eval-llm", "--generator", "thesis"])
+    assert "uv sync --extra llm" in str(exc.value)
+
+
+def test_cli_analyse_llm_missing_extra_exits_cleanly(tmp_path, capsys):
+    import importlib.util
+
+    if importlib.util.find_spec("anthropic") is not None:
+        pytest.skip("anthropic installed — missing-extra path can't be exercised")
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as exc:
+        main(["analyse", "--db", str(db), "--generator", "llm"])
+    assert "uv sync --extra llm" in str(exc.value)  # clean message, not a traceback

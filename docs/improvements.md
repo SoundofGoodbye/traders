@@ -10,6 +10,10 @@ backtest/optimizer rigor · the LLM upgrade path) and premortemed below. Each it
 slots behind an existing Protocol (`DataSource`, `ThesisGenerator`,
 `PostMortemGenerator`, `Optimizer`) and is mapped to a numbered slice.
 
+> **Status: this plan is complete — all slices 18–29 are shipped.** The roadmap
+> table and per-slice specs below are kept as the rationale/premortem record; see
+> [slices.md](slices.md) for the shipped descriptions.
+
 > **Numbering note.** This roadmap is kept in sync with the canonical build order
 > in [slices.md](slices.md). The original four-stream plan folded the backtest
 > work into one slice; in the build it landed as two (slice 22 replays the real
@@ -47,7 +51,7 @@ those LLM slices need. Both stay **behind an optional `llm` extra**, never in co
 | 26 | Fundamental & catalyst signals (value + earnings-proximity) | CORE | extends 18/20 | none | M | ✅ shipped |
 | 27 | `LLMThesisGenerator` (structured-output tool call) | LLM | `ThesisGenerator` | `llm` | M | ✅ shipped |
 | 28 | `LLMPostMortemGenerator` | LLM | `PostMortemGenerator` | `llm` | S | ✅ shipped |
-| 29 | Eval harness for the LLM generators | LLM | (eval) | `llm` | M | planned |
+| 29 | Eval harness for the LLM generators | LLM | (eval) | `llm` | M | ✅ shipped |
 
 **Slices 18–24, 26 are CORE + deterministic + hermetic** — implementable and
 fully user-testable offline. 25 is network (behind `realdata`). 27–29 are LLM

@@ -16,6 +16,7 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 - **Strategy goal, metrics, parameters, optimizer** — shipped; scores realized results against a numeric goal and proposes human-gated single-variable changes (slices 14–16).
 - **Backtest harness** — shipped; replays a parameter set — rotation+stub or the real signal strategy — over historical prices with transaction costs, next-bar fills, and an in-sample/out-of-sample split (slices 17, 22–23).
 - **Optimizer OOS gate** — shipped; `optimize --apply` is gated on out-of-sample improvement and Sharpe trial-deflation so the optimizer can't fish (slice 24).
+- **LLM generators + eval** — shipped; opt-in Claude-backed thesis (slice 27) and post-mortem (slice 28) generators behind the `llm` extra, plus an eval harness (`eval-llm`, slice 29) that scores them against fixtures as a CI gate.
 
 ## Agents
 
@@ -94,9 +95,12 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 export TRADERS_LLM_MODEL="claude-sonnet-4-6"             # optional; this is the default
 uv run traders analyse --generator llm                  # theses (or: run-daily --generator llm)
 uv run traders review --generator llm                   # post-mortems (or: run-weekly --generator llm)
+uv run traders eval-llm --min-pass-rate 0.8             # score the generators vs fixtures (CI gate)
 ```
 
 `LLMThesisGenerator` (theses) and `LLMPostMortemGenerator` (post-mortems) each force a structured-output tool call, so the model always returns a valid result — a thesis or an explicit decline, or an `{outcome, lessons}` write-up — never free text. The thesis note and the thesis's own text are treated as **untrusted**: wrapped as delimited data with a system instruction never to follow their contents, the tool-only response constrains output to the schema, and the result is validated and clamped before it is stored. The post-mortem generator additionally falls back to a deterministic write-up on any model error, so the weekly run can't be broken by a flaky call. The paper-only and human `--apply` gates are unchanged. The default install does not include `anthropic`; the test suite injects a fake client and stays fully offline.
+
+`eval-llm` scores both generators against golden fixture cases (e.g. a clearly cheap name should yield a thesis; a no-edge name should be declined; a win/loss should produce a grounded post-mortem) and prints a per-case pass/fail report. `--min-pass-rate` makes it exit non-zero below a threshold, so it doubles as a CI gate that catches a prompt or model change that quietly degrades quality. The harness itself is pure stdlib, so it is exercised hermetically in the test suite with fake generators.
 
 ## Web UI
 
@@ -130,7 +134,6 @@ The same machinery backs the **apply gate** (slice 24): `traders optimize --appl
 
 ## Current limitations
 
-- **No eval harness yet.** Both LLM generators ship — `LLMThesisGenerator` (slice 27) and `LLMPostMortemGenerator` (slice 28), behind the `llm` extra. What's missing is the eval harness (slice 29) that scores their output against fixtures so quality regressions are caught — the loop that keeps the LLM path honest.
 - **Quality & PEAD signals deferred.** Value (E/P, B/P, FCF/P) and earnings-proximity are wired into the signal thesis generator (slice 26), but a full Piotroski quality score (needs year-over-year statements) and post-earnings drift / SUE (needs consensus estimates) need richer fundamentals than a single yfinance snapshot — both wait on period-by-period statement ingestion.
 - **Scout defaults to date rotation.** Price-signal ranking is opt-in (`--rank signals`) and falls back to rotation when no prices are ingested, so the zero-data path still works.
 - **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing (post-close daily, weekly review) is left to the operator — wire them to cron, systemd timers, or whatever the host runs.

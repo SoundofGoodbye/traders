@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 from pathlib import Path
 
 from traders import __version__
@@ -38,6 +39,23 @@ def _emit(text: str, output: Path | None) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(text)
     print(f"wrote {output}")
+
+
+@contextmanager
+def _llm_extra_guard(active: bool, conn=None):
+    """Turn a missing-'llm'-extra ImportError into a clean CLI exit.
+
+    Only converts when ``active`` (an LLM generator was selected), so an unrelated
+    ImportError elsewhere isn't masked. Closes ``conn`` (if given) before exiting.
+    """
+    try:
+        yield
+    except ImportError as e:
+        if not active:
+            raise
+        if conn is not None:
+            conn.close()
+        raise SystemExit(str(e)) from e
 
 
 def _apply_with_gate(conn, args) -> None:
@@ -554,6 +572,37 @@ def main(argv: list[str] | None = None) -> None:
         help="Seconds between requests (be polite to Yahoo; default: 1.0)",
     )
 
+    eval_p = sub.add_parser(
+        "eval-llm",
+        help="Score the LLM generators against fixture cases "
+        "(needs the 'llm' extra + ANTHROPIC_API_KEY)",
+    )
+    eval_p.add_argument(
+        "--generator",
+        choices=("thesis", "postmortem", "both"),
+        default="both",
+        help="Which LLM generator(s) to evaluate (default: both)",
+    )
+    eval_p.add_argument(
+        "--min-pass-rate",
+        type=float,
+        default=None,
+        help="If set, exit non-zero when the overall pass rate is below this (0-1)",
+    )
+    eval_p.add_argument(
+        "--format",
+        dest="fmt",
+        choices=("text", "markdown"),
+        default="text",
+        help="Output format (default: text)",
+    )
+    eval_p.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Write the report(s) to this path instead of stdout",
+    )
+
     web = sub.add_parser(
         "web",
         help="Serve the local web UI",
@@ -649,9 +698,10 @@ def main(argv: list[str] | None = None) -> None:
             from traders.llm_thesis import LLMThesisGenerator
 
             generator = LLMThesisGenerator()
-        run_id, n_theses = analyst_run(
-            conn, generator=generator, research_run_id=args.research_run_id
-        )
+        with _llm_extra_guard(args.generator == "llm", conn):
+            run_id, n_theses = analyst_run(
+                conn, generator=generator, research_run_id=args.research_run_id
+            )
         print(f"analyst run {run_id}: {n_theses} thesis(es) (generator: {args.generator})")
         conn.close()
         return
@@ -689,7 +739,8 @@ def main(argv: list[str] | None = None) -> None:
             from traders.llm_postmortem import LLMPostMortemGenerator
 
             reviewer_generator = LLMPostMortemGenerator()
-        run_id, n = reviewer_run(conn, generator=reviewer_generator)
+        with _llm_extra_guard(args.generator == "llm", conn):
+            run_id, n = reviewer_run(conn, generator=reviewer_generator)
         if args.fmt == "markdown":
             target = run_id if run_id else latest_reviewer_run_id(conn)
             items = load_review_for_run(conn, target) if target else []
@@ -717,15 +768,16 @@ def main(argv: list[str] | None = None) -> None:
             from traders.prices import load_history_from_db
 
             scout_history = load_history_from_db(conn)
-        result = run_daily(
-            conn,
-            watchlist_path=args.watchlist,
-            batch_size=args.batch_size,
-            max_total_size_pct=args.max_total_size_pct,
-            data_source=ds,
-            analyst_generator=generator,
-            scout_history=scout_history,
-        )
+        with _llm_extra_guard(args.generator == "llm", conn):
+            result = run_daily(
+                conn,
+                watchlist_path=args.watchlist,
+                batch_size=args.batch_size,
+                max_total_size_pct=args.max_total_size_pct,
+                data_source=ds,
+                analyst_generator=generator,
+                scout_history=scout_history,
+            )
         # Markdown to stdout: keep it pipeable by suppressing step
         # summaries. In every other case (text, or markdown→file)
         # surface the per-step progress.
@@ -764,7 +816,8 @@ def main(argv: list[str] | None = None) -> None:
             from traders.llm_postmortem import LLMPostMortemGenerator
 
             reviewer_generator = LLMPostMortemGenerator()
-        result = run_weekly(conn, reviewer_generator=reviewer_generator)
+        with _llm_extra_guard(args.generator == "llm", conn):
+            result = run_weekly(conn, reviewer_generator=reviewer_generator)
         if args.fmt == "markdown":
             target = (
                 result.reviewer_run_id if result.reviewer_run_id else latest_reviewer_run_id(conn)
@@ -965,6 +1018,40 @@ def main(argv: list[str] | None = None) -> None:
         if skipped:
             print(f"  skipped: {', '.join(skipped)}")
         conn.close()
+        return
+
+    if args.cmd == "eval-llm":
+        from traders.eval_llm import (
+            default_post_mortem_cases,
+            default_thesis_cases,
+            evaluate_post_mortem_generator,
+            evaluate_thesis_generator,
+            render_report,
+        )
+
+        reports = []
+        parts = []
+        with _llm_extra_guard(True):
+            if args.generator in ("thesis", "both"):
+                from traders.llm_thesis import LLMThesisGenerator
+
+                rep = evaluate_thesis_generator(LLMThesisGenerator(), default_thesis_cases())
+                reports.append(rep)
+                parts.append(render_report(rep, "thesis generator", args.fmt))
+            if args.generator in ("postmortem", "both"):
+                from traders.llm_postmortem import LLMPostMortemGenerator
+
+                rep = evaluate_post_mortem_generator(
+                    LLMPostMortemGenerator(), default_post_mortem_cases()
+                )
+                reports.append(rep)
+                parts.append(render_report(rep, "post-mortem generator", args.fmt))
+        _emit("\n".join(parts), args.output)
+        if args.min_pass_rate is not None:
+            worst = min((r.pass_rate for r in reports), default=1.0)
+            if worst < args.min_pass_rate:
+                print(f"eval below threshold: {worst:.2f} < {args.min_pass_rate:.2f}")
+                raise SystemExit(1)
         return
 
     if args.cmd == "web":

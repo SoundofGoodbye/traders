@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–28 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–29 are shipped — the improvement plan is complete.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -180,11 +180,13 @@ Adds fundamental signal math to `signals_lib` and wires it into the `SignalThesi
 
 `traders.llm_postmortem.LLMPostMortemGenerator` implements the `PostMortemGenerator` protocol — the Reviewer's weekly write-up, Claude-backed, on the same pattern as slice 27: a forced structured-output tool call (`record_post_mortem` → `{outcome, lessons}`), prompt caching on the static system prompt, and the untrusted-text defense applied to the thesis's free-text fields (a rationale may itself trace back to ingested news/filings). The shared injected/lazy-client + model plumbing was extracted to `traders.llm` (`LLMGenerator`) this slice, so both LLM generators reuse it. Unlike the thesis generator, the protocol must **always** return a draft, so a model/parse error or empty output falls back to a deterministic one (the stub's price-derived outcome line + a "write-up unavailable" lessons note) — a flaky call can't fail the weekly run; a missing `llm` extra still fails fast. `traders review --generator llm` / `run-weekly --generator llm`; `TRADERS_LLM_MODEL` overrides the model. No migration.
 
-## Proposed — remaining improvement plan
+## Slice 29 — Eval harness for the LLM generators
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). One slice remains, the loop that keeps the LLM path honest:
+`traders.eval_llm`: a pure-stdlib, generator-agnostic harness that scores an LLM generator against fixture cases, so a prompt or model change that quietly degrades quality gets caught. Each case pairs an input with `Check` predicates over the output; `evaluate_thesis_generator` / `evaluate_post_mortem_generator` run the generator, apply the checks (a check that raises counts as a failure, never a crash), and aggregate an `EvalReport` (per-case pass/fail + overall pass rate). `default_thesis_cases` / `default_post_mortem_cases` are the golden fixtures (a clear-value note → expect a thesis; a no-edge note → expect a decline; a winner and a loser post-mortem). Hermetic: the harness imports no `anthropic`, so tests drive it with fake generators (or a real generator wired to an injected fake client). `traders eval-llm [--generator thesis|postmortem|both] [--min-pass-rate R]` runs the golden cases against the real Claude generators — the actual regression check — and exits non-zero below `--min-pass-rate`, so it works as a CI gate. This slice also made the `--generator llm` CLI paths exit cleanly (not traceback) when the `llm` extra is missing. No migration.
 
-- **Slice 29 — Eval harness for the LLM generators** (`llm` extra, planned): score the LLM thesis / post-mortem output against fixtures so quality regressions are caught. Hermetic via an injected fake client.
+## Improvement plan: complete
+
+All data-collection / predictive-analysis slices (18–29) from [improvements.md](improvements.md) are shipped: the deterministic signal stack (18–22), backtest/optimizer rigor (23–24), fundamentals (25–26), and the LLM path (27–29). The `Future` section below lists deferred ideas, not committed work.
 
 ## Future
 
