@@ -79,6 +79,13 @@ def main(argv: list[str] | None = None) -> None:
         default=None,
         help="Research run to analyse (defaults to latest)",
     )
+    analyse.add_argument(
+        "--generator",
+        choices=("stub", "signals"),
+        default="stub",
+        help="Thesis generator: 'stub' (canned) or 'signals' (price-driven; "
+        "needs ingested prices). Default: stub.",
+    )
 
     pm = sub.add_parser("pm", help="Run the Portfolio Manager")
     pm.add_argument("--db", type=Path, default=None, help="SQLite DB path")
@@ -150,6 +157,12 @@ def main(argv: list[str] | None = None) -> None:
         choices=("stub", "yfinance", "edgar"),
         default="stub",
         help="Evidence source for the Researcher step (default: stub)",
+    )
+    daily.add_argument(
+        "--generator",
+        choices=("stub", "signals"),
+        default="stub",
+        help="Thesis generator: 'stub' or 'signals' (price-driven). Default: stub.",
     )
     daily.add_argument(
         "--format",
@@ -384,8 +397,15 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "analyse":
         conn = connect(args.db)
         apply_migrations(conn)
-        run_id, n_theses = analyst_run(conn, research_run_id=args.research_run_id)
-        print(f"analyst run {run_id}: {n_theses} thesis(es)")
+        generator = None
+        if args.generator == "signals":
+            from traders.signals_thesis import build_signal_generator
+
+            generator = build_signal_generator(conn)
+        run_id, n_theses = analyst_run(
+            conn, generator=generator, research_run_id=args.research_run_id
+        )
+        print(f"analyst run {run_id}: {n_theses} thesis(es) (generator: {args.generator})")
         conn.close()
         return
 
@@ -431,12 +451,18 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         ds = make_data_source(args.data_source)
+        generator = None
+        if args.generator == "signals":
+            from traders.signals_thesis import build_signal_generator
+
+            generator = build_signal_generator(conn)
         result = run_daily(
             conn,
             watchlist_path=args.watchlist,
             batch_size=args.batch_size,
             max_total_size_pct=args.max_total_size_pct,
             data_source=ds,
+            analyst_generator=generator,
         )
         # Markdown to stdout: keep it pipeable by suppressing step
         # summaries. In every other case (text, or markdown→file)

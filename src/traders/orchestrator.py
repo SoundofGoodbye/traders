@@ -25,6 +25,7 @@ from traders.portfolio import run as pm_run
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
 from traders.scout import run as scout_run
+from traders.signals import ThesisGenerator
 
 
 @dataclass(frozen=True)
@@ -55,11 +56,14 @@ def run_daily(
     max_total_size_pct: float | None = None,
     data_source: DataSource | None = None,
     params: LearnedParameters | None = None,
+    analyst_generator: ThesisGenerator | None = None,
 ) -> DailyRunResult:
     """Run Scout → Researcher → Analyst → Portfolio Manager against `conn`.
 
     Learned parameters are loaded once and threaded to the agents;
     explicit `batch_size` / `max_total_size_pct` still override them.
+    ``analyst_generator`` lets a caller swap the stub thesis generator for the
+    signal-driven one; ``None`` keeps the Analyst's default (stub).
     """
     p = params or load_parameters()
     scout_id, picks = scout_run(
@@ -68,7 +72,9 @@ def run_daily(
     research_id, tickers = research_run(
         conn, data_source=data_source, scout_run_id=scout_id
     )
-    analyst_id, n_theses = analyst_run(conn, research_run_id=research_id)
+    analyst_id, n_theses = analyst_run(
+        conn, generator=analyst_generator, research_run_id=research_id
+    )
     report = pm_run(
         conn,
         analyst_run_id=analyst_id,

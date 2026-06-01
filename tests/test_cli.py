@@ -51,6 +51,20 @@ def test_cli_analyse_no_research_runs(tmp_path, capsys):
     assert "0 thesis" in out
 
 
+def test_cli_analyse_signals_generator_no_prices(tmp_path, capsys):
+    # --generator signals with no ingested prices yields no theses, hermetically.
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    capsys.readouterr()
+    main(["analyse", "--db", str(db), "--generator", "signals"])
+    out = capsys.readouterr().out
+    assert "generator: signals" in out
+    assert "0 thesis" in out
+
+
 def test_cli_pm_full_pipeline(tmp_path, capsys):
     db = tmp_path / "t.db"
     wl = tmp_path / "wl.json"
