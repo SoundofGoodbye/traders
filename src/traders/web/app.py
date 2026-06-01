@@ -24,7 +24,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from traders import feedback
+from traders import feedback, jobs
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
 from traders.web import csrf, queries
@@ -57,6 +57,9 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
     # otherwise a fresh per-process secret is fine for a single-user tool.
     secret = os.environ.get("TRADERS_WEB_SECRET") or csrf.new_secret()
+    # jobs.json / cron.log live beside the db, so the UI and the cron wrappers
+    # agree (both default to ./data).
+    jobs_data_dir = Path(db_path).parent if db_path is not None else None
 
     def get_conn() -> Iterator[sqlite3.Connection]:
         conn = connect(db_path)
@@ -212,6 +215,17 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             context={"post_mortems": queries.list_post_mortems(conn)},
         )
 
+    @app.get("/jobs", response_class=HTMLResponse)
+    def jobs_page(request: Request) -> Any:
+        return render_with_csrf(
+            request,
+            "jobs.html",
+            {
+                "jobs": jobs.job_status(jobs_data_dir),
+                "log_tail": jobs.read_log_tail(jobs_data_dir),
+            },
+        )
+
     # --- write actions (slice 13) -------------------------------------------
     # POST handlers call the existing traders.feedback functions directly, so
     # there is no parallel write path into `positions`. They are async and open
@@ -264,5 +278,13 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             lambda c: feedback.record_sell(c, price=price, position_id=position_id, notes=notes)
         )
         return redirect("/positions")
+
+    @app.post("/jobs/{name}/toggle")
+    async def post_toggle_job(name: str, request: Request) -> Any:
+        await check_csrf(request)
+        if name not in jobs.JOBS:
+            raise HTTPException(status_code=404, detail=f"no job {name}")
+        jobs.set_enabled(name, not jobs.is_enabled(name, jobs_data_dir), jobs_data_dir)
+        return redirect("/jobs")
 
     return app

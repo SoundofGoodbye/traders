@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set active = 'jobs' %}
+{% block title %}Jobs — traders{% endblock %}
+{% block content %}
+  <h1>Scheduled jobs</h1>
+  <p class="sub">Cron-driven runs. Turning a job off makes its cron wrapper skip the work — the crontab entry stays installed, so you can turn it back on any time.</p>
+
+  <table>
+    <thead><tr>
+      <th>Job</th><th>Schedule</th><th>Last run</th><th>State</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for j in jobs %}
+        <tr>
+          <td>
+            <div class="ticker">{{ j.label }}</div>
+            <div class="meta">{{ j.description }}</div>
+          </td>
+          <td><code>{{ j.schedule }}</code></td>
+          <td class="meta">
+            {% if j.last_run %}
+              {{ j.last_run }} <span class="tag">{{ j.last_status or "?" }}</span>
+            {% else %}
+              <span class="empty">never run</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if j.enabled %}<span class="tag long">on</span>
+            {% else %}<span class="tag short">off</span>{% endif %}
+          </td>
+          <td>
+            <form class="actions" method="post" action="/jobs/{{ j.name }}/toggle">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="{{ 'ghost' if j.enabled else '' }}">
+                {{ "Disable" if j.enabled else "Enable" }}
+              </button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h2>Recent log</h2>
+  {% if log_tail %}
+    <div class="card"><div class="pre">{{ log_tail }}</div></div>
+  {% else %}
+    <p class="empty">No runs logged yet (data/cron.log).</p>
+  {% endif %}
+{% endblock %}

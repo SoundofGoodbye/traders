@@ -333,6 +333,22 @@ def main(argv: list[str] | None = None) -> None:
     params_p = sub.add_parser("params", help="Show the active learned parameters")
     params_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
 
+    jobs_p = sub.add_parser("jobs", help="Show or toggle the scheduled (cron) jobs")
+    jobs_p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help="Directory holding jobs.json / cron.log (default: data)",
+    )
+    jobs_sub = jobs_p.add_subparsers(dest="jobs_action", required=True)
+    jobs_sub.add_parser("status", help="Show each job's schedule, on/off state, and last run")
+    jobs_enable = jobs_sub.add_parser("enable", help="Enable a job")
+    jobs_enable.add_argument("name")
+    jobs_disable = jobs_sub.add_parser("disable", help="Disable a job")
+    jobs_disable.add_argument("name")
+    jobs_check = jobs_sub.add_parser("check", help="Exit 0 if the job is enabled, 1 if disabled")
+    jobs_check.add_argument("name")
+
     metrics_p = sub.add_parser("metrics", help="Score realized results against the strategy goal")
     metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     metrics_p.add_argument(
@@ -850,6 +866,27 @@ def main(argv: list[str] | None = None) -> None:
         print("active learned parameters:")
         for name, value in asdict(load_parameters()).items():
             print(f"  {name}: {value}")
+        return
+
+    if args.cmd == "jobs":
+        from traders import jobs as jobs_mod
+
+        data_dir = args.data_dir
+        if args.jobs_action == "check":
+            raise SystemExit(0 if jobs_mod.is_enabled(args.name, data_dir) else 1)
+        if args.jobs_action in ("enable", "disable"):
+            try:
+                jobs_mod.set_enabled(args.name, args.jobs_action == "enable", data_dir)
+            except ValueError as e:
+                print(f"jobs error: {e}")
+                raise SystemExit(1) from e
+            print(f"{args.jobs_action}d {args.name}")
+            return
+        # status
+        for s in jobs_mod.job_status(data_dir):
+            state = "on " if s.enabled else "off"
+            last = f"{s.last_run} [{s.last_status}]" if s.last_run else "never run"
+            print(f"  [{state}] {s.name:7} {s.schedule:12}  last: {last}")
         return
 
     if args.cmd == "metrics":

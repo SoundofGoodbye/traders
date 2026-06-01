@@ -16,7 +16,9 @@ export PATH="$HOME/.local/bin:$HOME/.cargo/bin:/usr/local/bin:$PATH"
 LOG="data/cron.log"
 {
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') weekly review ====="
-  if uv run traders run-weekly --generator llm; then
+  if ! uv run traders jobs check weekly; then
+    echo "[skip] weekly disabled via UI"
+  elif uv run traders run-weekly --generator llm; then
     echo "[ok] weekly review complete"
   else
     echo "[error] run-weekly failed (for real LLM post-mortems: uv sync --extra llm + set ANTHROPIC_API_KEY in .env)"

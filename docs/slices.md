@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–31 are shipped.** Slices 18–29 completed the improvement plan; slice 30 added the Tiingo price source and slice 31 a `.env` config loader. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–32 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -195,6 +195,10 @@ Stooq gated its free CSV endpoint (it now returns an apikey/captcha prompt inste
 ## Slice 31 — .env config loader
 
 `traders.env.load_dotenv` — a minimal, zero-dependency `.env` reader (no `python-dotenv`) that the CLI calls once at startup, so secrets like `TIINGO_API_KEY`, `TRADERS_EDGAR_UA`, and `ANTHROPIC_API_KEY` live in one gitignored `./.env` instead of being exported by hand each shell. Deliberately conservative: **set-if-absent** (an exported var always wins, and the suite stays hermetic), missing file is a no-op, and it skips blanks / `#` comments / a leading `export` / quote-wrapped values. A committed `.env.example` documents every recognized key; `.env` is gitignored. No new dependency.
+
+## Slice 32 — Job control in the web UI
+
+`traders.jobs` is the small control surface the cron wrappers and the UI share: a per-job **enabled** flag in `<data_dir>/jobs.json`, and **last-run** status parsed from `cron.log`. The runner scripts call `traders jobs check NAME` and skip when a job is off, so toggling in the UI stops the work **without editing the crontab** — no command execution from the browser. `traders jobs {status,enable,disable,check}` exposes the same on the CLI. A new `/jobs` page (CSRF-protected, like the feedback writes) lists each job's schedule, on/off state, last run + status, and a tail of `cron.log`, with a button to flip each job. The jobs config lives beside the db (so the UI and cron agree), keeping web tests hermetic. No migration; reuses the slice-11/13 web layer + `web` extra.
 
 ## Future
 

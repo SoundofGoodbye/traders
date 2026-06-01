@@ -21,14 +21,18 @@ WL=()
 
 {
   echo "===== $(date '+%Y-%m-%d %H:%M:%S %Z') daily run ====="
-  echo "--- ingest-prices ---"
-  uv run traders ingest-prices "${WL[@]}" \
-    || echo "[warn] ingest-prices failed (set TIINGO_API_KEY in .env to enable price refresh)"
-  echo "--- run-daily (ranked Scout + signal theses, EDGAR research) ---"
-  if uv run traders run-daily "${WL[@]}" --data-source edgar --rank signals --generator signals; then
-    echo "[ok] daily run complete"
+  if ! uv run traders jobs check daily; then
+    echo "[skip] daily disabled via UI"
   else
-    echo "[error] run-daily failed"
+    echo "--- ingest-prices ---"
+    uv run traders ingest-prices "${WL[@]}" \
+      || echo "[warn] ingest-prices failed (set TIINGO_API_KEY in .env to enable price refresh)"
+    echo "--- run-daily (ranked Scout + signal theses, EDGAR research) ---"
+    if uv run traders run-daily "${WL[@]}" --data-source edgar --rank signals --generator signals; then
+      echo "[ok] daily run complete"
+    else
+      echo "[error] run-daily failed"
+    fi
   fi
   echo
 } >>"$LOG" 2>&1

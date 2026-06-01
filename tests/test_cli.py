@@ -1068,3 +1068,33 @@ def test_cli_analyse_llm_missing_extra_exits_cleanly(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
         main(["analyse", "--db", str(db), "--generator", "llm"])
     assert "uv sync --extra llm" in str(exc.value)  # clean message, not a traceback
+
+
+# ---- jobs CLI (slice 32) -------------------------------------------------
+
+
+def test_cli_jobs_status_enable_disable_check(tmp_path, capsys):
+    dd = ["--data-dir", str(tmp_path)]
+    main(["jobs", *dd, "status"])
+    assert "[on ] daily" in capsys.readouterr().out  # default enabled
+
+    main(["jobs", *dd, "disable", "daily"])
+    assert "disabled daily" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit) as e_off:
+        main(["jobs", *dd, "check", "daily"])
+    assert e_off.value.code == 1  # disabled -> non-zero (cron script skips)
+    with pytest.raises(SystemExit) as e_on:
+        main(["jobs", *dd, "check", "weekly"])
+    assert e_on.value.code == 0  # still enabled
+
+    capsys.readouterr()
+    main(["jobs", *dd, "status"])
+    assert "[off] daily" in capsys.readouterr().out
+
+
+def test_cli_jobs_unknown_exits_nonzero(tmp_path, capsys):
+    with pytest.raises(SystemExit) as exc:
+        main(["jobs", "--data-dir", str(tmp_path), "enable", "bogus"])
+    assert exc.value.code != 0
+    assert "unknown job" in capsys.readouterr().out
