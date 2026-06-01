@@ -600,6 +600,15 @@ def test_cli_backtest_compare_missing_experiment_exits_nonzero(tmp_path, capsys)
     assert "backtest error" in capsys.readouterr().out
 
 
+def test_cli_ingest_prices_skips_unmapped(tmp_path, capsys):
+    # An unmappable ticker is skipped before any network call — fully hermetic.
+    db = tmp_path / "t.db"
+    main(["ingest-prices", "--db", str(db), "--ticker", "FOO.ZZ"])
+    out = capsys.readouterr().out
+    assert "0 close(s)" in out
+    assert "skipped: FOO.ZZ" in out
+
+
 def test_cli_feedback_error_exits_nonzero(tmp_path, capsys):
     db_path = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:

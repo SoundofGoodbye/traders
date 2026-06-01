@@ -278,6 +278,31 @@ def main(argv: list[str] | None = None) -> None:
         help="Write the rendered result to this path instead of stdout",
     )
 
+    ingest_p = sub.add_parser(
+        "ingest-prices",
+        help="Fetch daily closes into the prices table (Stooq; free, stdlib-only)",
+    )
+    ingest_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    ingest_p.add_argument(
+        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
+    )
+    ingest_p.add_argument(
+        "--ticker",
+        action="append",
+        default=None,
+        metavar="SYM",
+        help="Ticker to ingest (repeatable; default: the whole watchlist)",
+    )
+    ingest_p.add_argument(
+        "--since", type=str, default=None, help="Only keep closes on/after YYYY-MM-DD"
+    )
+    ingest_p.add_argument(
+        "--delay",
+        type=float,
+        default=1.0,
+        help="Seconds between requests (be polite to Stooq; default: 1.0)",
+    )
+
     web = sub.add_parser(
         "web",
         help="Serve the local web UI",
@@ -615,6 +640,30 @@ def main(argv: list[str] | None = None) -> None:
             print(f"backtest error: {e}")
             conn.close()
             raise SystemExit(1) from e
+        conn.close()
+        return
+
+    if args.cmd == "ingest-prices":
+        from traders.price_ingest import ingest_prices
+        from traders.scout import load_watchlist
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
+        result = ingest_prices(
+            conn, tickers, since=args.since, delay_s=args.delay
+        )
+        written = result["written"]
+        skipped = result["skipped"]
+        total = sum(written.values())
+        print(
+            f"ingested {total} close(s) for {len(written)} ticker(s); "
+            f"{len(skipped)} skipped"
+        )
+        for ticker, n in written.items():
+            print(f"  {ticker}: {n}")
+        if skipped:
+            print(f"  skipped: {', '.join(skipped)}")
         conn.close()
         return
 
