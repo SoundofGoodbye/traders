@@ -22,6 +22,7 @@ from traders.data_sources import DataSource
 from traders.parameters import LearnedParameters, load_parameters
 from traders.portfolio import DailyReport
 from traders.portfolio import run as pm_run
+from traders.post_mortems import PostMortemGenerator
 from traders.prices import PriceHistory
 from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
@@ -96,7 +97,14 @@ def run_daily(
     )
 
 
-def run_weekly(conn: sqlite3.Connection) -> WeeklyRunResult:
-    """Run the weekly Reviewer against `conn`."""
-    run_id, n = reviewer_run(conn)
+def run_weekly(
+    conn: sqlite3.Connection,
+    reviewer_generator: PostMortemGenerator | None = None,
+) -> WeeklyRunResult:
+    """Run the weekly Reviewer against `conn`.
+
+    ``reviewer_generator`` selects the post-mortem writer (default: the stub);
+    pass an ``LLMPostMortemGenerator`` for Claude-written lessons.
+    """
+    run_id, n = reviewer_run(conn, generator=reviewer_generator)
     return WeeklyRunResult(reviewer_run_id=run_id, post_mortems_written=n)

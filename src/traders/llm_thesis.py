@@ -25,11 +25,9 @@ and the paper-only / human ``--apply`` gates downstream stay in force. See the
 
 from __future__ import annotations
 
-import os
-
+from traders.llm import LLMGenerator
 from traders.signals import DIRECTIONS, THESIS_TYPES, DraftThesis
 
-_DEFAULT_MODEL = "claude-sonnet-4-6"
 _MAX_TOKENS = 1024
 _MAX_NOTE_CHARS = 8000
 _MAX_SIZE_PCT = 10.0
@@ -129,7 +127,7 @@ def _to_drafts(data: dict) -> list[DraftThesis]:
     ]
 
 
-class LLMThesisGenerator:
+class LLMThesisGenerator(LLMGenerator):
     """Claude-backed ``ThesisGenerator``. Inject a client in tests; the default
     constructs a real ``anthropic.Anthropic`` lazily behind the ``llm`` extra.
     """
@@ -141,24 +139,8 @@ class LLMThesisGenerator:
         max_tokens: int = _MAX_TOKENS,
         max_note_chars: int = _MAX_NOTE_CHARS,
     ) -> None:
-        self._injected = client
-        self._real: object | None = None
-        self._model = model or os.environ.get("TRADERS_LLM_MODEL") or _DEFAULT_MODEL
-        self._max_tokens = max_tokens
+        super().__init__(client=client, model=model, max_tokens=max_tokens)
         self._max_note_chars = max_note_chars
-
-    def _resolve_client(self) -> object:
-        if self._injected is not None:
-            return self._injected
-        if self._real is None:
-            try:
-                import anthropic
-            except ImportError as e:
-                raise ImportError(
-                    "the LLM generator requires the 'llm' extra. Install with: uv sync --extra llm"
-                ) from e
-            self._real = anthropic.Anthropic()
-        return self._real
 
     def _user_content(self, ticker: str, content: str) -> str:
         note = (content or "").strip()[: self._max_note_chars]

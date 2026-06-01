@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–27 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–28 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -176,12 +176,15 @@ Adds fundamental signal math to `signals_lib` and wires it into the `SignalThesi
 
 `traders.llm_thesis.LLMThesisGenerator` implements the `ThesisGenerator` protocol — it drops into the Analyst like the stub/signal generators (no agent changes) and asks Claude to read the research note and propose a thesis via a **forced structured-output tool call** (`tool_choice` → `record_thesis`), so the response is always a valid `DraftThesis` or an explicit decline (`actionable=false`), never free text. The static system prompt is sent as a cached block (`cache_control: ephemeral`). Behind the optional `llm` extra (`anthropic`); the client is **injected**, so the default suite stays hermetic — tests pass a fake client (no `anthropic` import, no API key, no network) and only the real default client imports the SDK and reads `ANTHROPIC_API_KEY` (failing fast if the extra is missing, returning `[]` on a per-call API error). Security: the untrusted note is wrapped in `<research_note>` delimiters with a system instruction never to follow its contents, the tool-only response constrains output to the schema, the result is validated/clamped in Python, and the paper-only / human `--apply` gates stay in force. `traders analyse --generator llm` / `run-daily --generator llm`; `TRADERS_LLM_MODEL` overrides the model. No migration.
 
+## Slice 28 — LLMPostMortemGenerator
+
+`traders.llm_postmortem.LLMPostMortemGenerator` implements the `PostMortemGenerator` protocol — the Reviewer's weekly write-up, Claude-backed, on the same pattern as slice 27: a forced structured-output tool call (`record_post_mortem` → `{outcome, lessons}`), prompt caching on the static system prompt, and the untrusted-text defense applied to the thesis's free-text fields (a rationale may itself trace back to ingested news/filings). The shared injected/lazy-client + model plumbing was extracted to `traders.llm` (`LLMGenerator`) this slice, so both LLM generators reuse it. Unlike the thesis generator, the protocol must **always** return a draft, so a model/parse error or empty output falls back to a deterministic one (the stub's price-derived outcome line + a "write-up unavailable" lessons note) — a flaky call can't fail the weekly run; a missing `llm` extra still fails fast. `traders review --generator llm` / `run-weekly --generator llm`; `TRADERS_LLM_MODEL` overrides the model. No migration.
+
 ## Proposed — remaining improvement plan
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). What remains is the rest of the LLM path (the `llm` extra), kept hermetic via an injected fake client:
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). One slice remains, the loop that keeps the LLM path honest:
 
-- **Slice 28 — `LLMPostMortemGenerator`** (`llm` extra, planned): the Reviewer's post-mortem write-up behind the `PostMortemGenerator` protocol, same injected-client + structured-output pattern as slice 27.
-- **Slice 29 — Eval harness for the LLM generators** (`llm` extra, planned): score the LLM thesis/post-mortem output against fixtures so quality regressions are caught; the loop that keeps the LLM path honest.
+- **Slice 29 — Eval harness for the LLM generators** (`llm` extra, planned): score the LLM thesis / post-mortem output against fixtures so quality regressions are caught. Hermetic via an injected fake client.
 
 ## Future
 

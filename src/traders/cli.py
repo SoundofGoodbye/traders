@@ -215,6 +215,13 @@ def main(argv: list[str] | None = None) -> None:
     review = sub.add_parser("review", help="Run the Reviewer (weekly)")
     review.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     review.add_argument(
+        "--generator",
+        choices=("stub", "llm"),
+        default="stub",
+        help="Post-mortem writer: 'stub' (canned) or 'llm' (Claude; needs the "
+        "'llm' extra + ANTHROPIC_API_KEY). Default: stub.",
+    )
+    review.add_argument(
         "--format",
         dest="fmt",
         choices=("text", "markdown"),
@@ -282,6 +289,13 @@ def main(argv: list[str] | None = None) -> None:
 
     weekly = sub.add_parser("run-weekly", help="Run the weekly Reviewer")
     weekly.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    weekly.add_argument(
+        "--generator",
+        choices=("stub", "llm"),
+        default="stub",
+        help="Post-mortem writer: 'stub' or 'llm' (Claude; needs the 'llm' extra "
+        "+ ANTHROPIC_API_KEY). Default: stub.",
+    )
     weekly.add_argument(
         "--format",
         dest="fmt",
@@ -670,13 +684,18 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "review":
         conn = connect(args.db)
         apply_migrations(conn)
-        run_id, n = reviewer_run(conn)
+        reviewer_generator = None
+        if args.generator == "llm":
+            from traders.llm_postmortem import LLMPostMortemGenerator
+
+            reviewer_generator = LLMPostMortemGenerator()
+        run_id, n = reviewer_run(conn, generator=reviewer_generator)
         if args.fmt == "markdown":
             target = run_id if run_id else latest_reviewer_run_id(conn)
             items = load_review_for_run(conn, target) if target else []
             _emit(render_weekly_review_markdown(items, target), args.output)
         else:
-            print(f"reviewer run {run_id}: {n} post-mortem(s)")
+            print(f"reviewer run {run_id}: {n} post-mortem(s) (generator: {args.generator})")
         conn.close()
         return
 
@@ -740,7 +759,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "run-weekly":
         conn = connect(args.db)
         apply_migrations(conn)
-        result = run_weekly(conn)
+        reviewer_generator = None
+        if args.generator == "llm":
+            from traders.llm_postmortem import LLMPostMortemGenerator
+
+            reviewer_generator = LLMPostMortemGenerator()
+        result = run_weekly(conn, reviewer_generator=reviewer_generator)
         if args.fmt == "markdown":
             target = (
                 result.reviewer_run_id if result.reviewer_run_id else latest_reviewer_run_id(conn)
@@ -750,7 +774,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             print(
                 f"reviewer run {result.reviewer_run_id}: "
-                f"{result.post_mortems_written} post-mortem(s)"
+                f"{result.post_mortems_written} post-mortem(s) (generator: {args.generator})"
             )
         conn.close()
         return

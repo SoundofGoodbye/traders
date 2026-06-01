@@ -909,3 +909,49 @@ def test_cli_analyse_llm_generator(tmp_path, capsys, monkeypatch):
     assert row[0] == "value"
     assert row[1] == "long"
     assert row[2].startswith("[llm]")
+
+
+# ---- review --generator llm (slice 28) -----------------------------------
+
+
+def test_cli_review_llm_generator(tmp_path, capsys, monkeypatch):
+    from types import SimpleNamespace
+
+    import traders.llm_postmortem as llm_pm
+
+    tool_input = {"outcome": "AAA +20% as the thesis expected.", "lessons": "size winners larger"}
+
+    def fake_resolve(self):
+        def create(**kwargs):
+            block = SimpleNamespace(type="tool_use", input=tool_input)
+            return SimpleNamespace(content=[block])
+
+        return SimpleNamespace(messages=SimpleNamespace(create=create))
+
+    monkeypatch.setattr(llm_pm.LLMPostMortemGenerator, "_resolve_client", fake_resolve)
+
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    main(["analyse", "--db", str(db)])
+    conn = sqlite3.connect(db)
+    thesis_id = conn.execute("SELECT id FROM theses LIMIT 1").fetchone()[0]
+    conn.execute(
+        "INSERT INTO positions"
+        " (ticker, thesis_id, opened_at, closed_at, entry_price, exit_price, size_pct, status)"
+        " VALUES ('AAA', ?, '2026-01-01', '2026-02-01', 100.0, 120.0, 2.0, 'closed')",
+        (thesis_id,),
+    )
+    conn.commit()
+    conn.close()
+    capsys.readouterr()
+    main(["review", "--db", str(db), "--generator", "llm"])
+    out = capsys.readouterr().out
+    assert "generator: llm" in out
+    assert "1 post-mortem" in out
+    conn = sqlite3.connect(db)
+    lessons = conn.execute("SELECT lessons FROM post_mortems").fetchone()[0]
+    conn.close()
+    assert lessons.startswith("[llm]")
