@@ -47,11 +47,11 @@ def test_closes_before_unknown_ticker_is_empty():
 # ---- momentum -------------------------------------------------------------
 
 def test_momentum_basic_return():
-    assert momentum([100.0, 110.0, 121.0], lookback=2) == 21.0
+    assert abs(momentum([100.0, 110.0, 121.0], lookback=2) - 21.0) < 1e-9
 
 
 def test_momentum_skip_excludes_recent_bars():
-    assert momentum([100.0, 110.0, 200.0], lookback=1, skip=1) == 10.0
+    assert abs(momentum([100.0, 110.0, 200.0], lookback=1, skip=1) - 10.0) < 1e-9
 
 
 def test_momentum_insufficient_history_is_none():

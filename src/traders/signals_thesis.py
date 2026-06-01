@@ -105,8 +105,12 @@ class SignalThesisGenerator:
         deep = (mr is not None and mr <= -2.0) or (r is not None and r <= 20.0)
         return 4 if deep else 3
 
+    # Below this daily vol the series is effectively flat; scaling by it would
+    # explode size on float noise, so fall back to the base size.
+    _VOL_FLOOR = 1e-6
+
     def _vol_scaled_size(self, vol: float | None) -> float:
-        if not vol:  # None or 0.0 -> no usable vol estimate
+        if not vol or vol < self._VOL_FLOOR:
             return round(self.base_size_pct, 1)
         scale = max(0.5, min(2.0, self.target_daily_vol / vol))
         return round(max(0.5, min(5.0, self.base_size_pct * scale)), 1)
