@@ -816,3 +816,50 @@ def test_cli_optimize_apply_unknown_id_exits_nonzero(tmp_path, capsys):
         main(["optimize", "--apply", "999", "--db", str(db)])
     assert exc.value.code == 1
     assert "optimize error" in capsys.readouterr().out
+
+
+# ---- ingest-fundamentals (slice 25) --------------------------------------
+
+
+def test_cli_ingest_fundamentals_writes(tmp_path, capsys, monkeypatch):
+    # Patch the real yfinance fetcher with a canned one so the CLI path is hermetic.
+    import traders.fundamentals as fundamentals
+
+    monkeypatch.setattr(
+        fundamentals,
+        "_default_yf_fetcher",
+        lambda: lambda ticker: {"marketCap": 1.0e9, "trailingEps": 2.0},
+    )
+    db = tmp_path / "t.db"
+    main(
+        [
+            "ingest-fundamentals",
+            "--db",
+            str(db),
+            "--ticker",
+            "AAA",
+            "--ticker",
+            "BBB",
+            "--as-of",
+            "2026-06-01",
+            "--delay",
+            "0",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "ingested fundamentals for 2 ticker(s)" in out
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM fundamentals").fetchone()[0]
+    conn.close()
+    assert n == 2
+
+
+def test_cli_ingest_fundamentals_without_realdata_exits_cleanly(tmp_path):
+    import importlib.util
+
+    if importlib.util.find_spec("yfinance") is not None:
+        pytest.skip("yfinance installed — the missing-extra path can't be exercised")
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit) as exc:
+        main(["ingest-fundamentals", "--db", str(db), "--ticker", "AAA", "--delay", "0"])
+    assert "realdata" in str(exc.value)

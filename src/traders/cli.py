@@ -510,6 +510,34 @@ def main(argv: list[str] | None = None) -> None:
         help="Seconds between requests (be polite to Stooq; default: 1.0)",
     )
 
+    ingest_f = sub.add_parser(
+        "ingest-fundamentals",
+        help="Fetch fundamental snapshots into the fundamentals table "
+        "(yfinance; needs the 'realdata' extra)",
+    )
+    ingest_f.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    ingest_f.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
+    ingest_f.add_argument(
+        "--ticker",
+        action="append",
+        default=None,
+        metavar="SYM",
+        help="Ticker to ingest (repeatable; default: the whole watchlist)",
+    )
+    ingest_f.add_argument(
+        "--as-of",
+        dest="as_of",
+        type=str,
+        default=None,
+        help="Stamp snapshots with this ISO date (default: today)",
+    )
+    ingest_f.add_argument(
+        "--delay",
+        type=float,
+        default=1.0,
+        help="Seconds between requests (be polite to Yahoo; default: 1.0)",
+    )
+
     web = sub.add_parser(
         "web",
         help="Serve the local web UI",
@@ -878,6 +906,28 @@ def main(argv: list[str] | None = None) -> None:
         print(f"ingested {total} close(s) for {len(written)} ticker(s); {len(skipped)} skipped")
         for ticker, n in written.items():
             print(f"  {ticker}: {n}")
+        if skipped:
+            print(f"  skipped: {', '.join(skipped)}")
+        conn.close()
+        return
+
+    if args.cmd == "ingest-fundamentals":
+        from traders.fundamentals import ingest_fundamentals
+        from traders.scout import load_watchlist
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
+        try:
+            result = ingest_fundamentals(conn, tickers, as_of=args.as_of, delay_s=args.delay)
+        except ImportError as e:
+            conn.close()
+            raise SystemExit(str(e)) from e
+        written = result["written"]
+        skipped = result["skipped"]
+        print(f"ingested fundamentals for {len(written)} ticker(s); {len(skipped)} skipped")
+        for ticker in written:
+            print(f"  {ticker}")
         if skipped:
             print(f"  skipped: {', '.join(skipped)}")
         conn.close()

@@ -43,7 +43,7 @@ those LLM slices need. Both stay **behind an optional `llm` extra**, never in co
 | 22 | Signal strategy in the backtest | CORE | (backtest) | none | M | ✅ shipped |
 | 23 | Backtest realism: train/test split, costs, next-bar fills | CORE | (backtest) | none | M | ✅ shipped |
 | 24 | Optimizer OOS gate + trial-count deflation (PSR/DSR) | CORE | `Optimizer`/metrics | none | M | ✅ shipped |
-| 25 | yfinance/EDGAR **fundamentals** → `fundamentals` table | NETWORK | `DataSource` | `realdata` | M | planned |
+| 25 | yfinance **fundamentals** → `fundamentals` table | NETWORK | `DataSource` | `realdata` | M | ✅ shipped |
 | 26 | Fundamental & catalyst signals (value/quality/PEAD) | CORE | extends 18/20 | none | M | planned |
 | 27 | `LLMThesisGenerator` (structured-output tool call) | LLM | `ThesisGenerator` | `llm` | M | planned |
 | 28 | `LLMPostMortemGenerator` | LLM | `PostMortemGenerator` | `llm` | S | planned |
