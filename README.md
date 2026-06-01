@@ -11,7 +11,7 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 - **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems.
 - **Data sources** — shipped; `stub` default plus opt-in `yfinance` (news/fundamentals) and `edgar` (SEC filings).
 - **Signals & prices** — shipped; pure-stdlib signals library (momentum / realized vol / mean-reversion / RSI, slice 18) plus a Stooq price ingestor (slice 19) that fills the `prices` table the ranked Scout and signal generator read.
-- **Fundamentals** — shipped; opt-in yfinance fundamentals ingestor (slice 25) fills a point-in-time `fundamentals` table (market cap, trailing EPS, book value, free cash flow, next-earnings date) that the slice-26 value/quality/catalyst signals will build on.
+- **Fundamentals** — shipped; opt-in yfinance fundamentals ingestor (slice 25) fills a point-in-time `fundamentals` table that the slice-26 value signals (E/P, B/P, FCF/P) and earnings-proximity annotation build on, producing `value` theses from the signal generator.
 - **Web UI** — shipped; local FastAPI + Jinja2 read views plus feedback actions (slices 11–13).
 - **Strategy goal, metrics, parameters, optimizer** — shipped; scores realized results against a numeric goal and proposes human-gated single-variable changes (slices 14–16).
 - **Backtest harness** — shipped; replays a parameter set — rotation+stub or the real signal strategy — over historical prices with transaction costs, next-bar fills, and an in-sample/out-of-sample split (slices 17, 22–23).
@@ -117,7 +117,7 @@ The same machinery backs the **apply gate** (slice 24): `traders optimize --appl
 ## Current limitations
 
 - **No LLM generators yet.** Deterministic generators ship today — `StubThesisGenerator`, the slice-20 `SignalThesisGenerator` (price-driven), and `StubPostMortemGenerator`. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; model-backed implementations drop in behind them in slices 27–29.
-- **Fundamental signals not wired yet.** The slice-25 `fundamentals` table is ingested (`traders ingest-fundamentals`), but the value / quality / earnings-proximity signals that consume it land in slice 26 — today's signals are still price-only.
+- **Quality & PEAD signals deferred.** Value (E/P, B/P, FCF/P) and earnings-proximity are wired into the signal thesis generator (slice 26), but a full Piotroski quality score (needs year-over-year statements) and post-earnings drift / SUE (needs consensus estimates) need richer fundamentals than a single yfinance snapshot — both wait on period-by-period statement ingestion.
 - **Scout defaults to date rotation.** Price-signal ranking is opt-in (`--rank signals`) and falls back to rotation when no prices are ingested, so the zero-data path still works.
 - **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing (post-close daily, weekly review) is left to the operator — wire them to cron, systemd timers, or whatever the host runs.
 - **No caching across runs.** Real data comes from yfinance and SEC EDGAR today; FMP, Polygon, and paid news APIs are future slices. No cross-run cache yet — if rate limits start to bite, that's the trigger to add one.

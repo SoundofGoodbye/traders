@@ -158,6 +158,35 @@ def load_fundamentals(
     return [Fundamentals(*r) for r in rows]
 
 
+def load_fundamentals_asof(
+    conn: sqlite3.Connection,
+    as_of: str | None = None,
+    source: str | None = None,
+) -> dict[str, Fundamentals]:
+    """The latest snapshot per ticker on or before ``as_of`` (look-ahead-safe).
+
+    The bulk companion to :func:`latest_fundamentals` — one query, one row per
+    ticker — for the signal generator, which needs every name's as-of snapshot at
+    once. Returns ``{ticker: Fundamentals}``.
+    """
+    clauses: list[str] = []
+    params: list[object] = []
+    if as_of is not None:
+        clauses.append("as_of <= ?")
+        params.append(as_of)
+    if source is not None:
+        clauses.append("source = ?")
+        params.append(source)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    # Ascending as_of: the last write per ticker is the most recent visible one.
+    rows = conn.execute(f"{_SELECT}{where} ORDER BY as_of ASC", params).fetchall()
+    out: dict[str, Fundamentals] = {}
+    for r in rows:
+        snapshot = Fundamentals(*r)
+        out[snapshot.ticker] = snapshot
+    return out
+
+
 def latest_fundamentals(
     conn: sqlite3.Connection,
     ticker: str,

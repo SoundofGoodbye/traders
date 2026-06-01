@@ -44,7 +44,7 @@ those LLM slices need. Both stay **behind an optional `llm` extra**, never in co
 | 23 | Backtest realism: train/test split, costs, next-bar fills | CORE | (backtest) | none | M | ✅ shipped |
 | 24 | Optimizer OOS gate + trial-count deflation (PSR/DSR) | CORE | `Optimizer`/metrics | none | M | ✅ shipped |
 | 25 | yfinance **fundamentals** → `fundamentals` table | NETWORK | `DataSource` | `realdata` | M | ✅ shipped |
-| 26 | Fundamental & catalyst signals (value/quality/PEAD) | CORE | extends 18/20 | none | M | planned |
+| 26 | Fundamental & catalyst signals (value + earnings-proximity) | CORE | extends 18/20 | none | M | ✅ shipped |
 | 27 | `LLMThesisGenerator` (structured-output tool call) | LLM | `ThesisGenerator` | `llm` | M | planned |
 | 28 | `LLMPostMortemGenerator` | LLM | `PostMortemGenerator` | `llm` | S | planned |
 | 29 | Eval harness for the LLM generators | LLM | (eval) | `llm` | M | planned |
@@ -106,9 +106,12 @@ everything 18–26 build (incl. the eval loop that keeps it honest).
 - **25 Fundamentals ingestion.** `fundamentals` table (migration 007) + a
   `DataSource`-backed loader (yfinance/EDGAR financial-statements) behind
   `realdata`; feeds 26.
-- **26 Fundamental/catalyst signals.** Value (E/P, B/P, FCF/P), quality
-  (Piotroski F-score), catalyst/PEAD (SUE, days-to-earnings) added to 18 and
-  wired into 20.
+- **26 Fundamental/catalyst signals.** *Shipped:* value (E/P, B/P, FCF/P) and
+  earnings-proximity (`days_to_earnings`) added to 18 and wired into 20 — a cheap
+  name yields a `value` thesis; imminent earnings annotate any thesis as event
+  risk. *Deferred* (not computable from a single slice-25 snapshot): quality
+  (Piotroski F-score, needs period-by-period statements) and PEAD/SUE (needs
+  consensus estimates) — both wait on richer fundamentals ingestion.
 - **27–29 LLM path.** `LLMThesisGenerator` / `LLMPostMortemGenerator` behind an
   `llm` extra (anthropic SDK), forcing a valid `DraftThesis` via a
   structured-output tool call, with prompt caching on the system prompt and an

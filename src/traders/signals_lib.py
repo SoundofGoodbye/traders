@@ -163,3 +163,50 @@ def zscore(values: list[float | None]) -> list[float | None]:
     if sd == 0:
         return [None if v is None else 0.0 for v in values]
     return [None if v is None else (v - mu) / sd for v in values]
+
+
+# --- Fundamental signals (slice 26) ---------------------------------------
+# Scalar ratios over a point-in-time fundamentals snapshot joined with the price.
+# These take already-as-of-safe inputs — the caller passes the snapshot resolved
+# by ``fundamentals.latest_fundamentals(as_of=...)`` and the last close *before*
+# the decision day — so look-ahead is prevented the same way the price signals'
+# ``closes_before`` gate prevents it. Higher value yields = cheaper. Each returns
+# ``None`` when an input is missing or the denominator is non-positive, so a
+# sparse snapshot degrades gracefully instead of raising.
+
+
+def earnings_yield(trailing_eps: float | None, price: float | None) -> float | None:
+    """Trailing earnings yield E/P (= EPS / price). Can be negative (loss-making)."""
+    if trailing_eps is None or not price or price <= 0:
+        return None
+    return trailing_eps / price
+
+
+def book_to_price(book_value_per_share: float | None, price: float | None) -> float | None:
+    """Book-to-price B/P (= book value per share / price). Higher = cheaper on assets."""
+    if book_value_per_share is None or not price or price <= 0:
+        return None
+    return book_value_per_share / price
+
+
+def fcf_yield(free_cash_flow: float | None, market_cap: float | None) -> float | None:
+    """Free-cash-flow yield (= FCF / market cap). Higher = cheaper on cash generation."""
+    if free_cash_flow is None or not market_cap or market_cap <= 0:
+        return None
+    return free_cash_flow / market_cap
+
+
+def days_to_earnings(next_earnings_date: str | None, as_of: date) -> int | None:
+    """Calendar days from ``as_of`` to the next earnings date.
+
+    ``None`` when the date is missing or unparseable; negative when the date is
+    already in the past (a stale snapshot). Used as an event-risk annotation, not
+    a directional signal — a date alone says nothing about direction.
+    """
+    if not next_earnings_date:
+        return None
+    try:
+        nxt = date.fromisoformat(next_earnings_date[:10])
+    except ValueError:
+        return None
+    return (nxt - as_of).days

@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–25 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–26 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -168,11 +168,14 @@ Gates `optimize --apply` on an **out-of-sample** backtest so the slice-16 Optimi
 
 `traders.fundamentals` + migration `007_fundamentals.sql`: point-in-time fundamental snapshots per ticker (`market_cap`, `trailing_eps`, `book_value_per_share`, `free_cash_flow`, `shares_outstanding`, `next_earnings_date`) — the raw inputs the slice-26 value / quality / catalyst signals derive from. `ingest_fundamentals` hides the network behind an injected `fetch_fn` (real impl = yfinance `.info`, behind the `realdata` extra; tests inject canned info), mirroring the Stooq ingestor. `save_fundamentals` / `load_fundamentals` are idempotent on `(ticker, as_of, source)`, and `latest_fundamentals(..., as_of=...)` is the look-ahead-safe accessor slice 26 reads. Ratios aren't stored — slice 26 joins a snapshot against the `prices` close so it can't bake in a stale price. `traders ingest-fundamentals`. Caveat (documented): a yfinance `.info` reading is a *current* snapshot stamped with an `as_of` date, not a historical series — true historical fundamental backtests need period-by-period statements, deferred. No new dependency (reuses `realdata`); hermetic by default via the injected fetcher.
 
+## Slice 26 — Fundamental & catalyst signals
+
+Adds fundamental signal math to `signals_lib` and wires it into the `SignalThesisGenerator`. Value signals — `earnings_yield` (E/P), `book_to_price` (B/P), `fcf_yield` (FCF/market-cap) — join a look-ahead-safe slice-25 snapshot against the last close before the decision day; a name cheap on ≥2 of the three flags yields a long `value` thesis. `days_to_earnings` annotates whatever thesis fires with an event-risk note when earnings are imminent (≤7d) — a proximity flag, not a directional call. The generator gains an optional `fundamentals` map (resolved per as-of by `fundamentals.load_fundamentals_asof`); family priority is momentum → value → mean-reversion. **Additive by construction:** with no fundamentals (every historical backtest — snapshots aren't point-in-time history — and the default tests) behaviour is byte-identical to slice 20. `traders analyse --generator signals` / `run-daily --generator signals` pick up ingested fundamentals automatically. Deferred (not computable from a single snapshot): the full **Piotroski F-score** (needs period-by-period statements) and **PEAD/SUE** (needs consensus estimates). No migration, no new dependency.
+
 ## Proposed — remaining improvement plan
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). Slice 26 is CORE/offline (it builds on slice 25's ingested fundamentals); the LLM slices need a new optional dependency, so they sit at the boundary of what's autonomously testable offline.
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). Only the LLM path remains: it needs a new optional dependency (the `llm` extra), so it sits at the boundary of what's autonomously testable offline (kept hermetic via an injected fake client).
 
-- **Slice 26 — Fundamental & catalyst signals** (CORE, planned): value (E/P, B/P, FCF/P), quality (Piotroski F-score), PEAD/earnings-proximity added to `signals_lib` and wired into the Scout/Analyst.
 - **Slices 27–29 — LLM path** (`llm` extra, planned): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls (force a valid `DraftThesis`), prompt caching, and an eval harness; hermetic via an injected fake client. Treat ingested news/filings as untrusted (prompt-injection defense).
 
 ## Future

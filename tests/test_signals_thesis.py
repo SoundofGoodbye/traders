@@ -9,6 +9,7 @@ from pathlib import Path
 
 from traders import analyst, research, scout
 from traders.db import apply_migrations
+from traders.fundamentals import Fundamentals, save_fundamentals
 from traders.prices import PriceHistory, save_prices
 from traders.signals_thesis import SignalThesisGenerator, build_signal_generator
 
@@ -110,3 +111,86 @@ def test_build_signal_generator_empty_prices_is_graceful():
     conn = _conn()
     gen = build_signal_generator(conn, as_of=date(2026, 1, 1))
     assert gen.generate("AAA", "") == []  # no prices -> no thesis, no crash
+
+
+# ---- fundamental value / catalyst (slice 26) -----------------------------
+
+
+def _cheap(ticker: str, next_earnings: str | None = None) -> Fundamentals:
+    # vs a $100 price: E/P 8%, B/P 0.6, FCF yield 10% -> all three cheap flags.
+    return Fundamentals(
+        ticker=ticker,
+        as_of="2025-01-01",
+        currency="USD",
+        market_cap=1.0e10,
+        trailing_eps=8.0,
+        book_value_per_share=60.0,
+        free_cash_flow=1.0e9,
+        shares_outstanding=1.0e8,
+        next_earnings_date=next_earnings,
+    )
+
+
+def test_cheap_quiet_name_yields_value_thesis():
+    closes = [100.0] * 100  # flat: no momentum, not oversold
+    drafts = _gen("AAA", closes, fundamentals={"AAA": _cheap("AAA")}).generate("AAA", "")
+    assert len(drafts) == 1
+    d = drafts[0]
+    assert d.thesis_type == "value"
+    assert d.direction == "long"
+    assert d.conviction == 4  # 3/3 cheap flags
+    assert "value flags" in d.rationale
+
+
+def test_value_requires_fundamentals_supplied():
+    # The same flat name with no fundamentals stays a no-thesis (slice-20 behaviour).
+    assert _gen("AAA", [100.0] * 100).generate("AAA", "") == []
+
+
+def test_expensive_flat_name_yields_no_thesis():
+    closes = [100.0] * 100
+    pricey = Fundamentals("AAA", "2025-01-01", "USD", 1.0e10, 1.0, 10.0, 1.0e8, 1.0e8, None)
+    # vs $100: E/P 1%, B/P 0.1, FCF yield 1% -> zero cheap flags.
+    assert _gen("AAA", closes, fundamentals={"AAA": pricey}).generate("AAA", "") == []
+
+
+def test_momentum_takes_precedence_over_value():
+    closes = [100.0 * (1.01**i) for i in range(260)]  # strong uptrend
+    d = _gen("AAA", closes, fundamentals={"AAA": _cheap("AAA")}).generate("AAA", "")[0]
+    assert d.thesis_type == "momentum"  # price signal evaluated before value
+
+
+def test_earnings_proximity_annotates_thesis():
+    closes = [100.0 * (1.01**i) for i in range(260)]
+    as_of = START + timedelta(days=len(closes))
+    soon = (as_of + timedelta(days=3)).isoformat()
+    gen = SignalThesisGenerator(
+        history=PriceHistory(series={"AAA": _series(closes)}),
+        as_of=as_of,
+        fundamentals={"AAA": _cheap("AAA", next_earnings=soon)},
+    )
+    d = gen.generate("AAA", "")[0]
+    assert "Earnings in 3d" in d.rationale
+
+
+def test_distant_earnings_adds_no_note():
+    closes = [100.0 * (1.01**i) for i in range(260)]
+    as_of = START + timedelta(days=len(closes))
+    far = (as_of + timedelta(days=90)).isoformat()
+    gen = SignalThesisGenerator(
+        history=PriceHistory(series={"AAA": _series(closes)}),
+        as_of=as_of,
+        fundamentals={"AAA": _cheap("AAA", next_earnings=far)},
+    )
+    assert "Earnings in" not in gen.generate("AAA", "")[0].rationale
+
+
+def test_build_signal_generator_uses_ingested_fundamentals():
+    conn = _conn()
+    closes = [100.0] * 100
+    save_prices(conn, "AAA", list(_series(closes)))
+    save_fundamentals(conn, [_cheap("AAA")])
+    as_of = START + timedelta(days=len(closes))
+    drafts = build_signal_generator(conn, as_of=as_of).generate("AAA", "")
+    assert len(drafts) == 1
+    assert drafts[0].thesis_type == "value"

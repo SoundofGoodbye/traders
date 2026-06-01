@@ -6,7 +6,11 @@ from datetime import date
 
 from traders.prices import PriceHistory
 from traders.signals_lib import (
+    book_to_price,
     closes_before,
+    days_to_earnings,
+    earnings_yield,
+    fcf_yield,
     momentum,
     momentum_12_1,
     realized_vol,
@@ -162,3 +166,48 @@ def test_zscore_all_equal_is_zeroes():
 def test_zscore_preserves_none():
     out = zscore([1.0, None, 3.0])
     assert out == [-1.0, None, 1.0]
+
+
+# ---- fundamental signals (slice 26) --------------------------------------
+
+
+def test_earnings_yield_basic():
+    assert earnings_yield(5.0, 100.0) == 0.05  # P/E 20 -> E/P 5%
+
+
+def test_earnings_yield_can_be_negative():
+    assert earnings_yield(-2.0, 50.0) == -0.04  # loss-making
+
+
+def test_earnings_yield_none_on_bad_inputs():
+    assert earnings_yield(None, 100.0) is None
+    assert earnings_yield(5.0, 0.0) is None
+    assert earnings_yield(5.0, -10.0) is None
+
+
+def test_book_to_price_basic():
+    assert book_to_price(50.0, 100.0) == 0.5  # P/B 2 -> B/P 0.5
+
+
+def test_book_to_price_none_on_bad_inputs():
+    assert book_to_price(None, 100.0) is None
+    assert book_to_price(50.0, 0.0) is None
+
+
+def test_fcf_yield_basic():
+    assert fcf_yield(1.0e9, 2.0e10) == 0.05  # 5% FCF yield
+
+
+def test_fcf_yield_none_on_bad_inputs():
+    assert fcf_yield(1.0e9, None) is None
+    assert fcf_yield(1.0e9, 0.0) is None
+
+
+def test_days_to_earnings_future_and_past():
+    assert days_to_earnings("2026-06-15", date(2026, 6, 1)) == 14
+    assert days_to_earnings("2026-05-20", date(2026, 6, 1)) == -12  # past
+
+
+def test_days_to_earnings_none_on_missing_or_bad():
+    assert days_to_earnings(None, date(2026, 6, 1)) is None
+    assert days_to_earnings("not-a-date", date(2026, 6, 1)) is None
