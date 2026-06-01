@@ -68,6 +68,16 @@ uv run traders feedback sell    (--position-id N | --thesis-id N) --price P [--n
 
 `fill` / `partial` open a position; `sell` closes one; `skip` is a log-only record that the user declined the suggestion. Each event also writes a row to `feedback` carrying the price, size, and the position it opened or closed.
 
+## Configuration
+
+Secrets and per-machine settings live in a gitignored `.env` at the repo root, auto-loaded on every CLI run — no `python-dotenv` dependency, just a tiny stdlib loader (`traders.env`). Copy the template and fill in what you use:
+
+```bash
+cp .env.example .env     # then edit .env
+```
+
+Recognized keys: `TIINGO_API_KEY` (prices), `TRADERS_EDGAR_UA` (EDGAR research), `ANTHROPIC_API_KEY` + optional `TRADERS_LLM_MODEL` (LLM generators). An exported environment variable always overrides `.env`; a missing `.env` is a silent no-op. `.env` is gitignored — only the secret-free `.env.example` is committed. Run commands from the repo root so `./.env` is found.
+
 ## Data sources
 
 The Researcher reads evidence through a `DataSource` protocol; the default is `StubDataSource` (deterministic fixture data, no I/O). Two real adapters are opt-in: `YFinanceDataSource` (news + fundamentals, slice 9) and `EdgarDataSource` (recent 10-K/10-Q/8-K filings from SEC EDGAR, slice 10):

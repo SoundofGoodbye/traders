@@ -10,6 +10,7 @@ from traders import __version__
 from traders.analyst import run as analyst_run
 from traders.data_sources import make_data_source
 from traders.db import apply_migrations, connect
+from traders.env import load_dotenv
 from traders.feedback import (
     FeedbackError,
     record_fill,
@@ -148,6 +149,7 @@ def _apply_with_gate(conn, args) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    load_dotenv()  # pick up ./.env (TIINGO_API_KEY, TRADERS_EDGAR_UA, …) if present
     parser = argparse.ArgumentParser(prog="traders")
     parser.add_argument("--version", action="version", version=f"traders v{__version__}")
     sub = parser.add_subparsers(dest="cmd")

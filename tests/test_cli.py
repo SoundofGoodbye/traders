@@ -681,6 +681,7 @@ def test_cli_ingest_prices_skips_unmapped(tmp_path, capsys):
 def test_cli_ingest_prices_tiingo_missing_token_exits_cleanly(tmp_path, monkeypatch):
     # Default source is Tiingo, which needs a token — fail fast with a clear message.
     monkeypatch.delenv("TIINGO_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)  # isolate from any real ./.env the CLI would load
     db = tmp_path / "t.db"
     with pytest.raises(SystemExit) as exc:
         main(["ingest-prices", "--db", str(db), "--ticker", "AAPL"])

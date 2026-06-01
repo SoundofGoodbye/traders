@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–30 are shipped.** Slices 18–29 completed the improvement plan; slice 30 adds the Tiingo price source. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–31 are shipped.** Slices 18–29 completed the improvement plan; slice 30 added the Tiingo price source and slice 31 a `.env` config loader. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -191,6 +191,10 @@ All data-collection / predictive-analysis slices (18–29) from [improvements.md
 ## Slice 30 — Tiingo price source
 
 Stooq gated its free CSV endpoint (it now returns an apikey/captcha prompt instead of data), which broke the slice-19 ingestor's real-data path — it degraded gracefully (skipped every ticker, never crashed) but collected nothing. Slice 30 makes `ingest_prices` source-agnostic (an injectable `parse`, plus a `price_source(name)` selector returning `(fetch_csv, parse, symbol_map)`) and adds `traders.tiingo`: split/dividend-**adjusted** EOD closes (the right input for return-based signals) parsed from Tiingo's CSV (`adjClose`), behind the same injected-fetcher pattern so tests stay hermetic. The fetcher hard-requires `TIINGO_API_KEY` (free key; fail-fast at the boundary like the EDGAR adapter); Tiingo's free tier is US EOD so foreign-venue suffixes map to `None` (skipped). `traders ingest-prices --source {tiingo,stooq}` now defaults to `tiingo` and exits cleanly with the key hint when the token is missing. No migration, no new dependency (stdlib `urllib`+`csv`).
+
+## Slice 31 — .env config loader
+
+`traders.env.load_dotenv` — a minimal, zero-dependency `.env` reader (no `python-dotenv`) that the CLI calls once at startup, so secrets like `TIINGO_API_KEY`, `TRADERS_EDGAR_UA`, and `ANTHROPIC_API_KEY` live in one gitignored `./.env` instead of being exported by hand each shell. Deliberately conservative: **set-if-absent** (an exported var always wins, and the suite stays hermetic), missing file is a no-op, and it skips blanks / `#` comments / a leading `export` / quote-wrapped values. A committed `.env.example` documents every recognized key; `.env` is gitignored. No new dependency.
 
 ## Future
 
