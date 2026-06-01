@@ -165,9 +165,7 @@ def _metrics_text(card: ScoreCard) -> str:
     ]
     for c in card.criteria:
         flag = "PASS" if c.passed else "FAIL"
-        lines.append(
-            f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}"
-        )
+        lines.append(f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}")
     return "\n".join(lines)
 
 
@@ -182,9 +180,7 @@ def _metrics_markdown(card: ScoreCard) -> str:
     ]
     for c in card.criteria:
         flag = "✅" if c.passed else "❌"
-        lines.append(
-            f"| {c.name} | {_fmt_value(c.value)} | {c.threshold:.2f} | {flag} |"
-        )
+        lines.append(f"| {c.name} | {_fmt_value(c.value)} | {c.threshold:.2f} | {flag} |")
     return "\n".join(lines)
 
 
@@ -220,9 +216,7 @@ def render_backtest(result, fmt: str = "text") -> str:
     ]
     for c in result.scorecard.criteria:
         flag = "PASS" if c.passed else "FAIL"
-        lines.append(
-            f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}"
-        )
+        lines.append(f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}")
     return "\n".join(lines)
 
 
@@ -243,8 +237,7 @@ def render_backtest_comparison(baseline, candidate, fmt: str = "text") -> str:
         lines = [
             "# Backtest Comparison",
             "",
-            f"Window {baseline.start} → {baseline.end}, "
-            f"{baseline.holding_days}d hold.",
+            f"Window {baseline.start} → {baseline.end}, {baseline.holding_days}d hold.",
             "",
             "| Metric | Baseline | Candidate |",
             "| --- | --- | --- |",
@@ -253,8 +246,7 @@ def render_backtest_comparison(baseline, candidate, fmt: str = "text") -> str:
             lines.append(f"| {name} | {getter(baseline)} | {getter(candidate)} |")
         return "\n".join(lines) + "\n"
     lines = [
-        "Backtest comparison "
-        f"({baseline.start} -> {baseline.end}, hold {baseline.holding_days}d)",
+        f"Backtest comparison ({baseline.start} -> {baseline.end}, hold {baseline.holding_days}d)",
         f"  params: baseline batch={baseline.batch_size}/"
         f"cap={baseline.max_total_size_pct} vs candidate batch="
         f"{candidate.batch_size}/cap={candidate.max_total_size_pct}",

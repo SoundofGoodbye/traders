@@ -25,9 +25,12 @@ def apply_migrations(
 ) -> list[int]:
     """Apply any new `migrations/NNN_*.sql` in order; return versions applied."""
     mdir = Path(migrations_dir) if migrations_dir else DEFAULT_MIGRATIONS_DIR
-    has_table = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
-    ).fetchone() is not None
+    has_table = (
+        conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+        ).fetchone()
+        is not None
+    )
     applied: set[int] = set()
     if has_table:
         applied = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}

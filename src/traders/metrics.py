@@ -104,9 +104,7 @@ def _now_from(trades: list[ClosedTrade], now: datetime | None) -> datetime:
     return datetime.now(timezone.utc)
 
 
-def metrics_from_trades(
-    trades: list[ClosedTrade], now: datetime | None = None
-) -> Metrics:
+def metrics_from_trades(trades: list[ClosedTrade], now: datetime | None = None) -> Metrics:
     """Aggregate realized metrics over an explicit, ordered trade list.
 
     ``trades`` must be ordered oldest-close-first — ``max_drawdown_pct`` walks
@@ -167,8 +165,7 @@ def score(metrics: Metrics, goal: StrategyGoal) -> ScoreCard:
             "sharpe_per_trade",
             metrics.sharpe_per_trade,
             goal.min_sharpe,
-            metrics.sharpe_per_trade is not None
-            and metrics.sharpe_per_trade >= goal.min_sharpe,
+            metrics.sharpe_per_trade is not None and metrics.sharpe_per_trade >= goal.min_sharpe,
         ),
     ]
     if metrics.num_closed < goal.min_closed_for_verdict:

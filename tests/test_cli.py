@@ -180,9 +180,7 @@ def test_cli_feedback_fill_then_sell_then_review(tmp_path, capsys):
     assert "sell recorded" in out
 
     conn = sqlite3.connect(db_path)
-    status = conn.execute(
-        "SELECT status FROM positions WHERE id = ?", (position_id,)
-    ).fetchone()[0]
+    status = conn.execute("SELECT status FROM positions WHERE id = ?", (position_id,)).fetchone()[0]
     conn.close()
     assert status == "closed"
 
@@ -251,9 +249,7 @@ def test_cli_pm_markdown_to_output_file(tmp_path, capsys):
     main(["analyse", "--db", str(db)])
     capsys.readouterr()
     target = tmp_path / "out" / "report.md"
-    main(
-        ["pm", "--db", str(db), "--format", "markdown", "--output", str(target)]
-    )
+    main(["pm", "--db", str(db), "--format", "markdown", "--output", str(target)])
     assert target.exists()
     content = target.read_text()
     assert content.startswith("# Daily Report")
@@ -666,7 +662,9 @@ def test_cli_scout_rank_signals_falls_back_without_prices(tmp_path, capsys):
     db = tmp_path / "t.db"
     wl = tmp_path / "wl.json"
     wl.write_text(json.dumps({"sp100": ["AAA", "BBB"], "eurostoxx50": []}))
-    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "2", "--rank", "signals"])
+    main(
+        ["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "2", "--rank", "signals"]
+    )
     out = capsys.readouterr().out
     assert "scout run 1: 2 candidate(s)" in out
 

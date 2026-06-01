@@ -143,9 +143,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Run Scout → Researcher → Analyst → Portfolio Manager in sequence",
     )
     daily.add_argument("--db", type=Path, default=None, help="SQLite DB path")
-    daily.add_argument(
-        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
-    )
+    daily.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
     daily.add_argument(
         "--batch-size",
         type=int,
@@ -207,14 +205,10 @@ def main(argv: list[str] | None = None) -> None:
         help="Write the rendered review to this path instead of stdout",
     )
 
-    params_p = sub.add_parser(
-        "params", help="Show the active learned parameters"
-    )
+    params_p = sub.add_parser("params", help="Show the active learned parameters")
     params_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
 
-    metrics_p = sub.add_parser(
-        "metrics", help="Score realized results against the strategy goal"
-    )
+    metrics_p = sub.add_parser("metrics", help="Score realized results against the strategy goal")
     metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     metrics_p.add_argument(
         "--format",
@@ -237,11 +231,17 @@ def main(argv: list[str] | None = None) -> None:
     optimize_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     opt_action = optimize_p.add_mutually_exclusive_group()
     opt_action.add_argument(
-        "--apply", type=int, default=None, metavar="ID",
+        "--apply",
+        type=int,
+        default=None,
+        metavar="ID",
         help="Apply a proposed experiment by id",
     )
     opt_action.add_argument(
-        "--reject", type=int, default=None, metavar="ID",
+        "--reject",
+        type=int,
+        default=None,
+        metavar="ID",
         help="Reject a proposed experiment by id",
     )
 
@@ -256,9 +256,7 @@ def main(argv: list[str] | None = None) -> None:
         default="synthetic",
         help="Price history source (default: synthetic — deterministic, no setup)",
     )
-    backtest_p.add_argument(
-        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
-    )
+    backtest_p.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
     backtest_p.add_argument(
         "--start", type=str, default=None, help="Window start YYYY-MM-DD (default: end-180d)"
     )
@@ -336,9 +334,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Fetch daily closes into the prices table (Stooq; free, stdlib-only)",
     )
     ingest_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
-    ingest_p.add_argument(
-        "--watchlist", type=Path, default=None, help="Watchlist JSON path"
-    )
+    ingest_p.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
     ingest_p.add_argument(
         "--ticker",
         action="append",
@@ -432,13 +428,8 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         ds = make_data_source(args.data_source)
-        run_id, tickers = research_run(
-            conn, data_source=ds, scout_run_id=args.scout_run_id
-        )
-        print(
-            f"research run {run_id}: {len(tickers)} note(s) "
-            f"(source: {args.data_source})"
-        )
+        run_id, tickers = research_run(conn, data_source=ds, scout_run_id=args.scout_run_id)
+        print(f"research run {run_id}: {len(tickers)} note(s) (source: {args.data_source})")
         for t in tickers:
             print(f"  {t}")
         conn.close()
@@ -525,19 +516,13 @@ def main(argv: list[str] | None = None) -> None:
         # surface the per-step progress.
         quiet = args.fmt == "markdown" and args.output is None
         if not quiet:
-            print(
-                f"scout run {result.scout_run_id}: "
-                f"{len(result.scout_picks)} candidate(s)"
-            )
+            print(f"scout run {result.scout_run_id}: {len(result.scout_picks)} candidate(s)")
             print(
                 f"research run {result.research_run_id}: "
                 f"{len(result.research_tickers)} note(s) "
                 f"(source: {args.data_source})"
             )
-            print(
-                f"analyst run {result.analyst_run_id}: "
-                f"{result.analyst_thesis_count} thesis(es)"
-            )
+            print(f"analyst run {result.analyst_run_id}: {result.analyst_thesis_count} thesis(es)")
         report = result.report
         if args.fmt == "markdown":
             _emit(render_daily_report_markdown(report), args.output)
@@ -562,9 +547,7 @@ def main(argv: list[str] | None = None) -> None:
         result = run_weekly(conn)
         if args.fmt == "markdown":
             target = (
-                result.reviewer_run_id
-                if result.reviewer_run_id
-                else latest_reviewer_run_id(conn)
+                result.reviewer_run_id if result.reviewer_run_id else latest_reviewer_run_id(conn)
             )
             items = load_review_for_run(conn, target) if target else []
             _emit(render_weekly_review_markdown(items, target), args.output)
@@ -628,14 +611,9 @@ def main(argv: list[str] | None = None) -> None:
                         f"{exp.param} {exp.old_value} -> {exp.new_value}"
                     )
                     print(f"  hypothesis: {exp.hypothesis}")
-                    print(
-                        f"  review-only — apply with: traders optimize --apply {exp.id}"
-                    )
+                    print(f"  review-only — apply with: traders optimize --apply {exp.id}")
             for e in list_experiments(conn):
-                print(
-                    f"  [{e.status}] #{e.id} {e.param}: "
-                    f"{e.old_value} -> {e.new_value}"
-                )
+                print(f"  [{e.status}] #{e.id} {e.param}: {e.old_value} -> {e.new_value}")
         except OptimizerError as e:
             print(f"optimize error: {e}")
             conn.close()
@@ -663,19 +641,9 @@ def main(argv: list[str] | None = None) -> None:
         from traders.strategy import load_strategy
 
         end = _date.fromisoformat(args.end) if args.end else _date.today()
-        start = (
-            _date.fromisoformat(args.start)
-            if args.start
-            else end - _timedelta(days=180)
-        )
-        holding = (
-            args.holding_days if args.holding_days is not None else DEFAULT_HOLDING_DAYS
-        )
-        rebal = (
-            args.rebalance_days
-            if args.rebalance_days is not None
-            else DEFAULT_REBALANCE_DAYS
-        )
+        start = _date.fromisoformat(args.start) if args.start else end - _timedelta(days=180)
+        holding = args.holding_days if args.holding_days is not None else DEFAULT_HOLDING_DAYS
+        rebal = args.rebalance_days if args.rebalance_days is not None else DEFAULT_REBALANCE_DAYS
         watchlist = load_watchlist(args.watchlist)
         params = load_parameters(args.params)
         if args.batch_size is not None:
@@ -687,9 +655,7 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         if args.source == "db":
-            history = load_history_from_db(
-                conn, tickers=watchlist, start=start, end=end
-            )
+            history = load_history_from_db(conn, tickers=watchlist, start=start, end=end)
             if not history.tickers():
                 print(
                     "note: the prices table is empty for this window — ingest "
@@ -748,16 +714,11 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
-        result = ingest_prices(
-            conn, tickers, since=args.since, delay_s=args.delay
-        )
+        result = ingest_prices(conn, tickers, since=args.since, delay_s=args.delay)
         written = result["written"]
         skipped = result["skipped"]
         total = sum(written.values())
-        print(
-            f"ingested {total} close(s) for {len(written)} ticker(s); "
-            f"{len(skipped)} skipped"
-        )
+        print(f"ingested {total} close(s) for {len(written)} ticker(s); {len(skipped)} skipped")
         for ticker, n in written.items():
             print(f"  {ticker}: {n}")
         if skipped:

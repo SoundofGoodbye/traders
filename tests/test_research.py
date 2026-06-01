@@ -34,9 +34,7 @@ def db(tmp_path):
 def _seed_scout(db, tmp_path, tickers, run_date):
     wl_path = tmp_path / f"wl_{run_date.isoformat()}.json"
     wl_path.write_text(json.dumps({"sp100": tickers, "eurostoxx50": []}))
-    return scout_run(
-        db, watchlist_path=wl_path, run_date=run_date, batch_size=len(tickers)
-    )
+    return scout_run(db, watchlist_path=wl_path, run_date=run_date, batch_size=len(tickers))
 
 
 def test_render_content_groups_by_kind():
@@ -65,10 +63,12 @@ def test_render_sources_is_valid_json():
 
 def test_run_writes_one_note_per_candidate(db, tmp_path):
     scout_id, _ = _seed_scout(db, tmp_path, ["AAA", "BBB"], date(2026, 5, 20))
-    fake = FakeDataSource({
-        "AAA": [DataPoint("news", "AAA news", "stub://aaa", "snip", "2026-05-19")],
-        "BBB": [DataPoint("news", "BBB news", "stub://bbb", "snip", "2026-05-19")],
-    })
+    fake = FakeDataSource(
+        {
+            "AAA": [DataPoint("news", "AAA news", "stub://aaa", "snip", "2026-05-19")],
+            "BBB": [DataPoint("news", "BBB news", "stub://bbb", "snip", "2026-05-19")],
+        }
+    )
     run_id, tickers = research_run(db, data_source=fake, scout_run_id=scout_id)
     assert run_id == 1
     assert sorted(tickers) == ["AAA", "BBB"]

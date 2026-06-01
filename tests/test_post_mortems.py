@@ -108,7 +108,8 @@ def test_stub_generator_short_loss():
 def test_stub_generator_missing_prices():
     gen = StubPostMortemGenerator()
     draft = gen.generate(
-        _pos(entry=None, exit_=None), _thesis(),
+        _pos(entry=None, exit_=None),
+        _thesis(),
     )
     assert "unknown" in draft.outcome.lower()
     assert "[stub]" in draft.lessons
@@ -117,7 +118,8 @@ def test_stub_generator_missing_prices():
 def test_stub_generator_mentions_thesis_type_and_conviction():
     gen = StubPostMortemGenerator()
     draft = gen.generate(
-        _pos(), _thesis(thesis_type="catalyst", conviction=5),
+        _pos(),
+        _thesis(thesis_type="catalyst", conviction=5),
     )
     assert "catalyst" in draft.lessons
     assert "5" in draft.lessons

@@ -79,12 +79,8 @@ def realized_vol(closes: list[float], window: int = _TRADING_MONTH) -> float | N
     """
     if len(closes) < window + 1:
         return None
-    tail = closes[-(window + 1):]
-    returns = [
-        tail[i] / tail[i - 1] - 1.0
-        for i in range(1, len(tail))
-        if tail[i - 1] != 0
-    ]
+    tail = closes[-(window + 1) :]
+    returns = [tail[i] / tail[i - 1] - 1.0 for i in range(1, len(tail)) if tail[i - 1] != 0]
     if len(returns) < 2:
         return None
     return pstdev(returns)
@@ -139,9 +135,7 @@ def _quantile(sorted_xs: list[float], p: float) -> float:
     return sorted_xs[idx]
 
 
-def winsorize(
-    values: list[float | None], lo: float = 0.05, hi: float = 0.95
-) -> list[float | None]:
+def winsorize(values: list[float | None], lo: float = 0.05, hi: float = 0.95) -> list[float | None]:
     """Clamp each value to the ``[lo, hi]`` quantiles of the present values.
 
     Thresholds come only from the values given (the day's cross-section) — never

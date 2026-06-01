@@ -19,9 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 _PACKAGED_DEFAULT = Path(__file__).resolve().parent / "data" / "strategy.default.json"
-_OVERRIDE = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "strategy.json"
-)
+_OVERRIDE = Path(__file__).resolve().parent.parent.parent / "data" / "strategy.json"
 
 
 @dataclass(frozen=True)

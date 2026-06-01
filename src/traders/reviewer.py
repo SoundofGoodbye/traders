@@ -20,16 +20,12 @@ from traders.post_mortems import (
 
 
 def _has_any_closed_positions(conn: sqlite3.Connection) -> bool:
-    row = conn.execute(
-        "SELECT 1 FROM positions WHERE status = 'closed' LIMIT 1"
-    ).fetchone()
+    row = conn.execute("SELECT 1 FROM positions WHERE status = 'closed' LIMIT 1").fetchone()
     return row is not None
 
 
 def _next_run_id(conn: sqlite3.Connection) -> int:
-    row = conn.execute(
-        "SELECT COALESCE(MAX(reviewer_run_id), 0) FROM post_mortems"
-    ).fetchone()
+    row = conn.execute("SELECT COALESCE(MAX(reviewer_run_id), 0) FROM post_mortems").fetchone()
     return int(row[0]) + 1
 
 
@@ -93,9 +89,7 @@ def run(
     rows = []
     for position, thesis in pairs:
         draft = gen.generate(position, thesis)
-        rows.append(
-            (position.position_id, run_id, draft.outcome, draft.lessons, created_at)
-        )
+        rows.append((position.position_id, run_id, draft.outcome, draft.lessons, created_at))
     conn.executemany(
         "INSERT INTO post_mortems"
         " (position_id, reviewer_run_id, outcome, lessons, created_at)"

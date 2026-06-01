@@ -185,8 +185,7 @@ def latest_scout_run_id(conn: sqlite3.Connection) -> int | None:
 def candidates_for_run(conn: sqlite3.Connection, scout_run_id: int) -> list[Candidate]:
     """All candidates from one Scout run, in insertion order."""
     rows = conn.execute(
-        "SELECT ticker, reason, scout_run_id FROM candidates"
-        " WHERE scout_run_id = ? ORDER BY id",
+        "SELECT ticker, reason, scout_run_id FROM candidates WHERE scout_run_id = ? ORDER BY id",
         (scout_run_id,),
     ).fetchall()
     return [Candidate(ticker=r[0], reason=r[1], scout_run_id=int(r[2])) for r in rows]
@@ -315,8 +314,7 @@ def picks_for_run(conn: sqlite3.Connection, pm_run_id: int) -> list[Pick]:
         (pm_run_id,),
     ).fetchall()
     return [
-        Pick(thesis=_thesis(r[3:]), decision=r[0], reason=r[1], pm_run_id=int(r[2]))
-        for r in rows
+        Pick(thesis=_thesis(r[3:]), decision=r[0], reason=r[1], pm_run_id=int(r[2])) for r in rows
     ]
 
 
@@ -325,9 +323,7 @@ def picks_for_run(conn: sqlite3.Connection, pm_run_id: int) -> list[Pick]:
 
 def open_positions(conn: sqlite3.Connection) -> list[Position]:
     """All open positions, oldest first."""
-    rows = conn.execute(
-        f"{_POSITION_SELECT} WHERE p.status = 'open' ORDER BY p.id"
-    ).fetchall()
+    rows = conn.execute(f"{_POSITION_SELECT} WHERE p.status = 'open' ORDER BY p.id").fetchall()
     return [_position(r) for r in rows]
 
 
@@ -340,9 +336,7 @@ def open_position_for_thesis(conn: sqlite3.Connection, thesis_id: int) -> int | 
     return None if row is None else int(row[0])
 
 
-def recently_closed_positions(
-    conn: sqlite3.Connection, limit: int = 20
-) -> list[Position]:
+def recently_closed_positions(conn: sqlite3.Connection, limit: int = 20) -> list[Position]:
     """Recently closed positions, most recently closed first."""
     rows = conn.execute(
         f"{_POSITION_SELECT} WHERE p.status = 'closed'"

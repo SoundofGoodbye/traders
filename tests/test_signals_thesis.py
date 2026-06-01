@@ -39,8 +39,9 @@ def _conn() -> sqlite3.Connection:
 
 # ---- generator behaviour --------------------------------------------------
 
+
 def test_uptrend_yields_momentum_long():
-    closes = [100.0 * (1.01 ** i) for i in range(260)]
+    closes = [100.0 * (1.01**i) for i in range(260)]
     drafts = _gen("AAA", closes).generate("AAA", "")
     assert len(drafts) == 1
     d = drafts[0]
@@ -75,17 +76,18 @@ def test_unknown_ticker_yields_no_thesis():
 
 def test_low_vol_uptrend_sizes_at_base():
     # A clean 1%/day climb has ~zero return-dispersion -> base size.
-    closes = [100.0 * (1.01 ** i) for i in range(260)]
+    closes = [100.0 * (1.01**i) for i in range(260)]
     d = _gen("AAA", closes, base_size_pct=2.0).generate("AAA", "")[0]
     assert d.suggested_size_pct == 2.0
 
 
 # ---- integration through the Analyst -------------------------------------
 
+
 def test_analyst_persists_signal_thesis(tmp_path):
     conn = _conn()
     # Seed an uptrend in prices for AAA, all before the as_of date.
-    closes = [100.0 * (1.01 ** i) for i in range(260)]
+    closes = [100.0 * (1.01**i) for i in range(260)]
     save_prices(conn, "AAA", list(_series(closes)))
 
     wl = tmp_path / "wl.json"

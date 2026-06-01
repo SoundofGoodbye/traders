@@ -59,12 +59,9 @@ def _thesis_row(conn: sqlite3.Connection, thesis_id: int) -> tuple[str, float]:
     return row[0], float(row[1])
 
 
-def _open_position_for_thesis(
-    conn: sqlite3.Connection, thesis_id: int
-) -> tuple[int, str] | None:
+def _open_position_for_thesis(conn: sqlite3.Connection, thesis_id: int) -> tuple[int, str] | None:
     row = conn.execute(
-        "SELECT id, ticker FROM positions"
-        " WHERE thesis_id = ? AND status = 'open'",
+        "SELECT id, ticker FROM positions WHERE thesis_id = ? AND status = 'open'",
         (thesis_id,),
     ).fetchone()
     if row is None:
@@ -72,18 +69,13 @@ def _open_position_for_thesis(
     return int(row[0]), row[1]
 
 
-def _open_position_by_id(
-    conn: sqlite3.Connection, position_id: int
-) -> tuple[int, int, str]:
+def _open_position_by_id(conn: sqlite3.Connection, position_id: int) -> tuple[int, int, str]:
     row = conn.execute(
-        "SELECT id, thesis_id, ticker FROM positions"
-        " WHERE id = ? AND status = 'open'",
+        "SELECT id, thesis_id, ticker FROM positions WHERE id = ? AND status = 'open'",
         (position_id,),
     ).fetchone()
     if row is None:
-        raise FeedbackError(
-            f"no open position with id={position_id}"
-        )
+        raise FeedbackError(f"no open position with id={position_id}")
     return int(row[0]), int(row[1]), row[2]
 
 
@@ -133,9 +125,7 @@ def _close_position(
     closed_at: str,
 ) -> None:
     conn.execute(
-        "UPDATE positions"
-        " SET status = 'closed', exit_price = ?, closed_at = ?"
-        " WHERE id = ?",
+        "UPDATE positions SET status = 'closed', exit_price = ?, closed_at = ? WHERE id = ?",
         (price, closed_at, position_id),
     )
 
@@ -156,9 +146,7 @@ def record_fill(
     """
     ticker, suggested = _thesis_row(conn, thesis_id)
     if _open_position_for_thesis(conn, thesis_id) is not None:
-        raise FeedbackError(
-            f"thesis {thesis_id} already has an open position; sell it first"
-        )
+        raise FeedbackError(f"thesis {thesis_id} already has an open position; sell it first")
     ts = reported_at or _now()
     size = float(size_pct) if size_pct is not None else suggested
     position_id = _open_position(
@@ -206,9 +194,7 @@ def record_partial(
     """
     ticker, _suggested = _thesis_row(conn, thesis_id)
     if _open_position_for_thesis(conn, thesis_id) is not None:
-        raise FeedbackError(
-            f"thesis {thesis_id} already has an open position; sell it first"
-        )
+        raise FeedbackError(f"thesis {thesis_id} already has an open position; sell it first")
     ts = reported_at or _now()
     position_id = _open_position(
         conn,
@@ -292,9 +278,7 @@ def record_sell(
         _thesis_row(conn, thesis_id)
         found = _open_position_for_thesis(conn, thesis_id)
         if found is None:
-            raise FeedbackError(
-                f"no open position for thesis {thesis_id}"
-            )
+            raise FeedbackError(f"no open position for thesis {thesis_id}")
         pid = found[0]
         tid = thesis_id
     ts = reported_at or _now()

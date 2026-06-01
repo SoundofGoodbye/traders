@@ -78,8 +78,7 @@ def test_run_writes_one_post_mortem_per_unreviewed_closed_position(db, tmp_path)
     assert run_id == 1
     assert n == 2
     rows = db.execute(
-        "SELECT position_id, reviewer_run_id, outcome, lessons"
-        " FROM post_mortems ORDER BY id"
+        "SELECT position_id, reviewer_run_id, outcome, lessons FROM post_mortems ORDER BY id"
     ).fetchall()
     assert [r[0] for r in rows] == [p1, p2]
     for _, r_id, outcome, lessons in rows:
@@ -146,9 +145,7 @@ def test_run_uses_stub_generator_by_default(db, tmp_path):
     run_id, n = reviewer_run(db)
     assert run_id == 1
     assert n == 1
-    outcome, lessons = db.execute(
-        "SELECT outcome, lessons FROM post_mortems"
-    ).fetchone()
+    outcome, lessons = db.execute("SELECT outcome, lessons FROM post_mortems").fetchone()
     assert "+20.00%" in outcome
     assert "AAA" in outcome
     assert "[stub]" in lessons

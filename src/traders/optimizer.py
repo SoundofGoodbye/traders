@@ -67,9 +67,7 @@ class Experiment:
 class Optimizer(Protocol):
     """Propose zero-or-one change given a scorecard and current params."""
 
-    def propose(
-        self, scorecard: ScoreCard, params: LearnedParameters
-    ) -> Proposal | None: ...
+    def propose(self, scorecard: ScoreCard, params: LearnedParameters) -> Proposal | None: ...
 
 
 class StubOptimizer:
@@ -80,9 +78,7 @@ class StubOptimizer:
     learn from yet. The failing criterion picks the knob.
     """
 
-    def propose(
-        self, scorecard: ScoreCard, params: LearnedParameters
-    ) -> Proposal | None:
+    def propose(self, scorecard: ScoreCard, params: LearnedParameters) -> Proposal | None:
         if scorecard.verdict != "failing":
             return None
         failing = {c.name for c in scorecard.criteria if not c.passed}
@@ -105,9 +101,7 @@ class StubOptimizer:
             )
         return None
 
-    def _exposure(
-        self, params: LearnedParameters, new: float, why: str
-    ) -> Proposal | None:
+    def _exposure(self, params: LearnedParameters, new: float, why: str) -> Proposal | None:
         if new == params.max_total_size_pct:
             return None
         direction = "lower" if new < params.max_total_size_pct else "raise"
@@ -143,16 +137,12 @@ _SELECT = (
 )
 
 
-def list_experiments(
-    conn: sqlite3.Connection, status: str | None = None
-) -> list[Experiment]:
+def list_experiments(conn: sqlite3.Connection, status: str | None = None) -> list[Experiment]:
     """All experiments (optionally filtered by status), newest first."""
     if status is None:
         rows = conn.execute(f"{_SELECT} ORDER BY id DESC").fetchall()
     else:
-        rows = conn.execute(
-            f"{_SELECT} WHERE status = ? ORDER BY id DESC", (status,)
-        ).fetchall()
+        rows = conn.execute(f"{_SELECT} WHERE status = ? ORDER BY id DESC", (status,)).fetchall()
     return [_row_to_experiment(r) for r in rows]
 
 
@@ -213,9 +203,7 @@ def _require_proposed(conn: sqlite3.Connection, experiment_id: int) -> Experimen
     if exp is None:
         raise OptimizerError(f"no experiment with id={experiment_id}")
     if exp.status != "proposed":
-        raise OptimizerError(
-            f"experiment {experiment_id} is {exp.status}, not proposed"
-        )
+        raise OptimizerError(f"experiment {experiment_id} is {exp.status}, not proposed")
     return exp
 
 

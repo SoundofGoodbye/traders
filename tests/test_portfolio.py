@@ -30,9 +30,7 @@ def db(tmp_path):
 def _seed_theses(db, tmp_path, tickers, run_date):
     wl = tmp_path / f"wl_{run_date.isoformat()}.json"
     wl.write_text(json.dumps({"sp100": tickers, "eurostoxx50": []}))
-    scout_id, _ = scout_run(
-        db, watchlist_path=wl, run_date=run_date, batch_size=len(tickers)
-    )
+    scout_id, _ = scout_run(db, watchlist_path=wl, run_date=run_date, batch_size=len(tickers))
     research_id, _ = research_run(db, scout_run_id=scout_id)
     analyst_id, _ = analyst_run(db, research_run_id=research_id)
     return analyst_id

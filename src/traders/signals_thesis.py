@@ -116,9 +116,7 @@ class SignalThesisGenerator:
         return round(max(0.5, min(5.0, self.base_size_pct * scale)), 1)
 
 
-def build_signal_generator(
-    conn, as_of: date | None = None, **kwargs
-) -> SignalThesisGenerator:
+def build_signal_generator(conn, as_of: date | None = None, **kwargs) -> SignalThesisGenerator:
     """Build a generator from the DB's prices table (CLI/orchestrator helper)."""
     from traders.prices import load_history_from_db
 

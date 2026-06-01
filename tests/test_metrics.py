@@ -92,8 +92,12 @@ def test_max_drawdown_tracks_peak_to_trough():
 def test_short_direction_pnl_is_inverted():
     conn = _conn()
     _seed(
-        conn, ticker="TSLA", entry=100, exit_=80,
-        closed_at="2025-01-10T00:00:00+00:00", direction="short",
+        conn,
+        ticker="TSLA",
+        entry=100,
+        exit_=80,
+        closed_at="2025-01-10T00:00:00+00:00",
+        direction="short",
     )
 
     m = compute_metrics(conn, now=NOW)

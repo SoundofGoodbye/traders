@@ -51,9 +51,7 @@ def test_run_writes_candidates(db, tmp_path):
     run_id, picks = run(db, watchlist_path=wl_path, run_date=date(2026, 5, 20), batch_size=2)
     assert run_id == 1
     assert len(picks) == 2
-    rows = db.execute(
-        "SELECT ticker, scout_run_id, reason FROM candidates ORDER BY id"
-    ).fetchall()
+    rows = db.execute("SELECT ticker, scout_run_id, reason FROM candidates ORDER BY id").fetchall()
     assert len(rows) == 2
     assert {r[0] for r in rows} == set(picks)
     assert all(r[1] == run_id for r in rows)

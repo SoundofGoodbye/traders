@@ -35,8 +35,7 @@ def _seed_thesis(db, tmp_path, ticker, run_date):
     research_id, _ = research_run(db, scout_run_id=scout_id)
     analyst_run(db, research_run_id=research_id)
     row = db.execute(
-        "SELECT id, suggested_size_pct FROM theses"
-        " WHERE ticker = ? ORDER BY id DESC LIMIT 1",
+        "SELECT id, suggested_size_pct FROM theses WHERE ticker = ? ORDER BY id DESC LIMIT 1",
         (ticker,),
     ).fetchone()
     return int(row[0]), float(row[1])
@@ -56,8 +55,7 @@ def test_record_fill_opens_position_at_suggested_size(db, tmp_path):
     ).fetchone()
     assert pos == ("AAA", thesis_id, 101.5, suggested, "open", None, None)
     fb = db.execute(
-        "SELECT thesis_id, action, price, size_pct, position_id"
-        " FROM feedback WHERE id = ?",
+        "SELECT thesis_id, action, price, size_pct, position_id FROM feedback WHERE id = ?",
         (event.feedback_id,),
     ).fetchone()
     assert fb == (thesis_id, "fill", 101.5, suggested, event.position_id)
@@ -198,9 +196,7 @@ def test_feedback_flow_feeds_reviewer(db, tmp_path):
 
     thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
     fill = record_fill(db, thesis_id=thesis_id, price=100.0)
-    record_sell(
-        db, price=120.0, position_id=fill.position_id, reported_at="2026-05-20T00:00:00"
-    )
+    record_sell(db, price=120.0, position_id=fill.position_id, reported_at="2026-05-20T00:00:00")
     run_id, n = reviewer_run(db)
     assert n == 1
     outcome = db.execute("SELECT outcome FROM post_mortems").fetchone()[0]

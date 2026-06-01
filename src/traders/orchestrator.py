@@ -75,9 +75,7 @@ def run_daily(
         params=p,
         history=scout_history,
     )
-    research_id, tickers = research_run(
-        conn, data_source=data_source, scout_run_id=scout_id
-    )
+    research_id, tickers = research_run(conn, data_source=data_source, scout_run_id=scout_id)
     analyst_id, n_theses = analyst_run(
         conn, generator=analyst_generator, research_run_id=research_id
     )

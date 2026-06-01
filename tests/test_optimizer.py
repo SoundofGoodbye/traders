@@ -33,16 +33,21 @@ def _conn() -> sqlite3.Connection:
 
 def _metrics() -> Metrics:
     return Metrics(
-        num_closed=10, num_decided=10, num_wins=5, hit_rate=0.5,
-        avg_pnl_pct=0.0, total_pnl_pct=0.0, return_pct_30d=0.0,
-        max_drawdown_pct=0.0, sharpe_per_trade=0.0,
+        num_closed=10,
+        num_decided=10,
+        num_wins=5,
+        hit_rate=0.5,
+        avg_pnl_pct=0.0,
+        total_pnl_pct=0.0,
+        return_pct_30d=0.0,
+        max_drawdown_pct=0.0,
+        sharpe_per_trade=0.0,
     )
 
 
 def _card(verdict: str, failing: set[str]) -> ScoreCard:
     criteria = [
-        CriterionScore(name=n, value=0.0, threshold=0.0, passed=n not in failing)
-        for n in CRITERIA
+        CriterionScore(name=n, value=0.0, threshold=0.0, passed=n not in failing) for n in CRITERIA
     ]
     return ScoreCard(verdict=verdict, criteria=criteria, metrics=_metrics())
 
@@ -78,6 +83,7 @@ DRAWDOWN_GOAL = StrategyGoal("g", "", 5.0, 5.0, 0.5, 0.1, 4)
 
 
 # ---- StubOptimizer rule ---------------------------------------------------
+
 
 def test_no_proposal_when_on_track():
     assert StubOptimizer().propose(_card("on_track", set()), LearnedParameters()) is None
@@ -119,6 +125,7 @@ def test_only_one_variable_changes():
 
 
 # ---- experiments ledger ---------------------------------------------------
+
 
 def test_propose_logs_experiment_without_changing_params(tmp_path: Path):
     conn = _conn()

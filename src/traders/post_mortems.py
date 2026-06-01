@@ -63,9 +63,7 @@ def compute_pnl_pct(
 class PostMortemGenerator(Protocol):
     """Produce a post-mortem for one closed position + its thesis."""
 
-    def generate(
-        self, position: ClosedPosition, thesis: ThesisContext
-    ) -> PostMortemDraft: ...
+    def generate(self, position: ClosedPosition, thesis: ThesisContext) -> PostMortemDraft: ...
 
 
 class StubPostMortemGenerator:
@@ -76,12 +74,8 @@ class StubPostMortemGenerator:
     behind the same protocol.
     """
 
-    def generate(
-        self, position: ClosedPosition, thesis: ThesisContext
-    ) -> PostMortemDraft:
-        pnl = compute_pnl_pct(
-            thesis.direction, position.entry_price, position.exit_price
-        )
+    def generate(self, position: ClosedPosition, thesis: ThesisContext) -> PostMortemDraft:
+        pnl = compute_pnl_pct(thesis.direction, position.entry_price, position.exit_price)
         if pnl is None:
             result = "unknown"
             outcome = (

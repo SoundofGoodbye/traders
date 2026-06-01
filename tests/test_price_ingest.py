@@ -29,6 +29,7 @@ def _conn() -> sqlite3.Connection:
 
 # ---- symbol map -----------------------------------------------------------
 
+
 def test_us_ticker_maps_to_us_suffix():
     assert to_stooq_symbol("AAPL") == "aapl.us"
 
@@ -53,6 +54,7 @@ def test_unknown_suffix_and_empty_are_none():
 
 # ---- CSV parsing ----------------------------------------------------------
 
+
 def test_parse_stooq_csv_drops_bad_rows():
     rows = parse_stooq_csv(SAMPLE_CSV)
     assert rows == [("2026-01-02", 10.5), ("2026-01-03", 11.5)]
@@ -63,6 +65,7 @@ def test_parse_stooq_csv_empty_text():
 
 
 # ---- ingestion ------------------------------------------------------------
+
 
 def test_ingest_writes_under_original_ticker():
     conn = _conn()
@@ -109,9 +112,7 @@ def test_ingest_skips_on_fetch_error():
 
 def test_ingest_since_filters_rows():
     conn = _conn()
-    result = ingest_prices(
-        conn, ["AAPL"], fetch_csv=lambda _s: SAMPLE_CSV, since="2026-01-03"
-    )
+    result = ingest_prices(conn, ["AAPL"], fetch_csv=lambda _s: SAMPLE_CSV, since="2026-01-03")
     assert result["written"] == {"AAPL": 1}
     hist = load_history_from_db(conn)
     assert hist.close_asof("AAPL", date(2026, 1, 2)) is None

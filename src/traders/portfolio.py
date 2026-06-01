@@ -89,16 +89,12 @@ def _theses_for_run(conn: sqlite3.Connection, analyst_run_id: int) -> list[Thesi
 
 
 def _open_positions(conn: sqlite3.Connection) -> list[OpenPosition]:
-    rows = conn.execute(
-        "SELECT ticker, size_pct FROM positions WHERE status = 'open'"
-    ).fetchall()
+    rows = conn.execute("SELECT ticker, size_pct FROM positions WHERE status = 'open'").fetchall()
     return [OpenPosition(ticker=r[0], size_pct=float(r[1])) for r in rows]
 
 
 def _next_run_id(conn: sqlite3.Connection) -> int:
-    row = conn.execute(
-        "SELECT COALESCE(MAX(pm_run_id), 0) FROM pm_decisions"
-    ).fetchone()
+    row = conn.execute("SELECT COALESCE(MAX(pm_run_id), 0) FROM pm_decisions").fetchone()
     return int(row[0]) + 1
 
 
@@ -145,8 +141,7 @@ def evaluate(
                 _item(
                     existing,
                     "rejected",
-                    f"duplicate ticker; preferred thesis {t.thesis_id} "
-                    "(higher conviction)",
+                    f"duplicate ticker; preferred thesis {t.thesis_id} (higher conviction)",
                 )
             )
             selected[t.ticker] = t
@@ -155,8 +150,7 @@ def evaluate(
                 _item(
                     t,
                     "rejected",
-                    f"duplicate ticker; kept thesis {existing.thesis_id} "
-                    "(higher conviction)",
+                    f"duplicate ticker; kept thesis {existing.thesis_id} (higher conviction)",
                 )
             )
 
@@ -171,8 +165,7 @@ def evaluate(
                 _item(
                     t,
                     "rejected",
-                    f"concentration: existing open position in {t.ticker} "
-                    f"({held[t.ticker]:.1f}%)",
+                    f"concentration: existing open position in {t.ticker} ({held[t.ticker]:.1f}%)",
                 )
             )
             continue
@@ -218,15 +211,9 @@ def run(
         if max_total_size_pct is not None
         else (params or load_parameters()).max_total_size_pct
     )
-    target = (
-        analyst_run_id
-        if analyst_run_id is not None
-        else _latest_analyst_run_id(conn)
-    )
+    target = analyst_run_id if analyst_run_id is not None else _latest_analyst_run_id(conn)
     if target is None:
-        return DailyReport(
-            pm_run_id=0, analyst_run_id=0, accepted=[], rejected=[]
-        )
+        return DailyReport(pm_run_id=0, analyst_run_id=0, accepted=[], rejected=[])
     theses = _theses_for_run(conn, target)
     positions = _open_positions(conn)
     pm_run_id = _next_run_id(conn)
@@ -238,10 +225,7 @@ def run(
             "INSERT INTO pm_decisions"
             " (pm_run_id, thesis_id, decision, reason, created_at)"
             " VALUES (?, ?, ?, ?, ?)",
-            [
-                (pm_run_id, i.thesis_id, i.decision, i.reason, created_at)
-                for i in items
-            ],
+            [(pm_run_id, i.thesis_id, i.decision, i.reason, created_at) for i in items],
         )
         conn.commit()
     return DailyReport(

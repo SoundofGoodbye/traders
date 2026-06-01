@@ -191,9 +191,7 @@ def test_yfinance_caps_news_at_limit():
         ],
         info={},
     )
-    ds = YFinanceDataSource(
-        ticker_fn=_ticker_fn_from({"X": fake}), news_limit=3
-    )
+    ds = YFinanceDataSource(ticker_fn=_ticker_fn_from({"X": fake}), news_limit=3)
     points = ds.fetch("X")
     assert len(points) == 3
 
@@ -269,12 +267,27 @@ def test_edgar_emits_filing_data_points():
 
 def test_edgar_filters_unwanted_forms():
     filings = [
-        {"form": "10-K", "filingDate": "2026-01-15", "accessionNumber": "a-1",
-         "primaryDocument": "x.htm", "cik": "1"},
-        {"form": "SC 13G", "filingDate": "2026-02-01", "accessionNumber": "a-2",
-         "primaryDocument": "y.htm", "cik": "1"},
-        {"form": "10-Q", "filingDate": "2026-04-30", "accessionNumber": "a-3",
-         "primaryDocument": "z.htm", "cik": "1"},
+        {
+            "form": "10-K",
+            "filingDate": "2026-01-15",
+            "accessionNumber": "a-1",
+            "primaryDocument": "x.htm",
+            "cik": "1",
+        },
+        {
+            "form": "SC 13G",
+            "filingDate": "2026-02-01",
+            "accessionNumber": "a-2",
+            "primaryDocument": "y.htm",
+            "cik": "1",
+        },
+        {
+            "form": "10-Q",
+            "filingDate": "2026-04-30",
+            "accessionNumber": "a-3",
+            "primaryDocument": "z.htm",
+            "cik": "1",
+        },
     ]
     ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}))
     points = ds.fetch("X")
@@ -296,8 +309,13 @@ def test_edgar_swallows_fetcher_error():
 
 def test_edgar_respects_limit():
     filings = [
-        {"form": "8-K", "filingDate": f"2026-04-{i:02d}",
-         "accessionNumber": f"a-{i}", "primaryDocument": f"d{i}.htm", "cik": "1"}
+        {
+            "form": "8-K",
+            "filingDate": f"2026-04-{i:02d}",
+            "accessionNumber": f"a-{i}",
+            "primaryDocument": f"d{i}.htm",
+            "cik": "1",
+        }
         for i in range(1, 11)
     ]
     ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}), limit=3)
@@ -309,8 +327,13 @@ def test_edgar_skips_non_dict_items():
     filings = [
         None,
         "not a dict",
-        {"form": "10-K", "filingDate": "2026-01-15", "accessionNumber": "a-1",
-         "primaryDocument": "x.htm", "cik": "1"},
+        {
+            "form": "10-K",
+            "filingDate": "2026-01-15",
+            "accessionNumber": "a-1",
+            "primaryDocument": "x.htm",
+            "cik": "1",
+        },
     ]
     ds = EdgarDataSource(filings_fn=_filings_fn_from({"X": filings}))
     points = ds.fetch("X")

@@ -36,10 +36,10 @@ def _ramp(start_price: float, pct: float, n: int) -> list[float]:
 def _universe() -> PriceHistory:
     return PriceHistory(
         series={
-            "AAA": _series(_ramp(100.0, 0.01, 260)),       # strong momentum
-            "BBB": _series(_ramp(100.0, 0.001, 260)),      # mild momentum
+            "AAA": _series(_ramp(100.0, 0.01, 260)),  # strong momentum
+            "BBB": _series(_ramp(100.0, 0.001, 260)),  # mild momentum
             "CCC": _series([100.0] * 240 + [100.0 - 1.5 * i for i in range(1, 21)]),  # oversold
-            "DDD": _series([100.0] * 30),                  # too little history
+            "DDD": _series([100.0] * 30),  # too little history
         }
     )
 
@@ -56,10 +56,11 @@ def _conn() -> sqlite3.Connection:
 
 # ---- ranking --------------------------------------------------------------
 
+
 def test_rank_surfaces_momentum_and_oversold_drops_no_history():
     ranked = scout.rank_candidates(WATCHLIST, _universe(), AS_OF, batch_size=2)
     assert set(ranked) == {"AAA", "CCC"}  # trend leader + washed-out name
-    assert "DDD" not in ranked            # insufficient history
+    assert "DDD" not in ranked  # insufficient history
 
 
 def test_rank_returns_empty_when_no_signals():
@@ -68,6 +69,7 @@ def test_rank_returns_empty_when_no_signals():
 
 
 # ---- scout.run integration ------------------------------------------------
+
 
 def test_run_with_history_writes_signal_ranked(tmp_path):
     conn = _conn()

@@ -31,6 +31,7 @@ def _hist() -> PriceHistory:
 
 # ---- look-ahead gate ------------------------------------------------------
 
+
 def test_closes_before_excludes_as_of_day():
     # The 01-03 close must NOT be visible when deciding on 01-03.
     assert closes_before(_hist(), "AAA", date(2026, 1, 3)) == [10.0, 11.0]
@@ -45,6 +46,7 @@ def test_closes_before_unknown_ticker_is_empty():
 
 
 # ---- momentum -------------------------------------------------------------
+
 
 def test_momentum_basic_return():
     assert abs(momentum([100.0, 110.0, 121.0], lookback=2) - 21.0) < 1e-9
@@ -66,6 +68,7 @@ def test_momentum_12_1_falls_back_then_gives_none():
 
 # ---- realized vol ---------------------------------------------------------
 
+
 def test_realized_vol_constant_series_is_zero():
     assert realized_vol([100.0] * 25, window=21) == 0.0
 
@@ -80,6 +83,7 @@ def test_realized_vol_short_series_is_none():
 
 
 # ---- mean-reversion z-score ----------------------------------------------
+
 
 def test_zscore_meanrev_above_mean_is_positive():
     z = zscore_meanrev([1.0, 2.0, 3.0, 4.0, 5.0], window=5)
@@ -96,6 +100,7 @@ def test_zscore_meanrev_short_series_is_none():
 
 # ---- RSI ------------------------------------------------------------------
 
+
 def test_rsi_all_up_is_100():
     assert rsi([float(i) for i in range(1, 17)], period=14) == 100.0
 
@@ -105,8 +110,23 @@ def test_rsi_all_down_is_zero():
 
 
 def test_rsi_mixed_is_between_bounds():
-    closes = [10.0, 11.0, 10.5, 11.5, 11.0, 12.0, 11.5, 12.5, 12.0, 13.0,
-              12.5, 13.5, 13.0, 14.0, 13.5]
+    closes = [
+        10.0,
+        11.0,
+        10.5,
+        11.5,
+        11.0,
+        12.0,
+        11.5,
+        12.5,
+        12.0,
+        13.0,
+        12.5,
+        13.5,
+        13.0,
+        14.0,
+        13.5,
+    ]
     r = rsi(closes, period=14)
     assert r is not None and 0.0 < r < 100.0
 
@@ -116,6 +136,7 @@ def test_rsi_short_series_is_none():
 
 
 # ---- cross-sectional helpers ---------------------------------------------
+
 
 def test_winsorize_clamps_to_quantiles():
     assert winsorize([1.0, 2.0, 3.0, 4.0, 5.0], lo=0.25, hi=0.75) == [2.0, 2.0, 3.0, 4.0, 4.0]

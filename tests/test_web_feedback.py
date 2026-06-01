@@ -99,9 +99,7 @@ def test_sell_closes_open_position(tmp_path):
     conn.close()
     client = TestClient(create_app(db_path))
     token = _csrf_token(client)
-    resp = client.post(
-        f"/positions/{position_id}/sell", data={"csrf_token": token, "price": "130"}
-    )
+    resp = client.post(f"/positions/{position_id}/sell", data={"csrf_token": token, "price": "130"})
     assert resp.status_code == 200
     assert _positions(db_path) == [("AAA", 100.0, 130.0, 2.0, "closed")]
 
@@ -184,15 +182,11 @@ def test_fill_twice_maps_feedback_error_to_400(tmp_path):
     thesis_id, _ = _seed(db_path, tmp_path)
     client = TestClient(create_app(db_path))
     token = _csrf_token(client)
-    first = client.post(
-        f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "100"}
-    )
+    first = client.post(f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "100"})
     assert first.status_code == 200
     # second fill on a thesis that already has an open position is a domain
     # error in traders.feedback; the web layer surfaces it as a 400, not a 500
-    second = client.post(
-        f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "105"}
-    )
+    second = client.post(f"/theses/{thesis_id}/fill", data={"csrf_token": token, "price": "105"})
     assert second.status_code == 400
     assert _positions(db_path) == [("AAA", 100.0, None, 2.0, "open")]
 
@@ -202,7 +196,5 @@ def test_sell_unknown_position_maps_feedback_error_to_400(tmp_path):
     _seed(db_path, tmp_path)
     client = TestClient(create_app(db_path))
     token = _csrf_token(client)
-    resp = client.post(
-        "/positions/999999/sell", data={"csrf_token": token, "price": "130"}
-    )
+    resp = client.post("/positions/999999/sell", data={"csrf_token": token, "price": "130"})
     assert resp.status_code == 400

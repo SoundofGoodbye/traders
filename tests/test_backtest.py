@@ -106,9 +106,7 @@ def test_missing_price_is_skipped_not_fatal():
 
 
 def test_higher_exposure_cap_allows_more_trades():
-    hist = synthetic_history(
-        ["AAA", "BBB", "CCC"], date(2026, 1, 1), date(2026, 3, 31)
-    )
+    hist = synthetic_history(["AAA", "BBB", "CCC"], date(2026, 1, 1), date(2026, 3, 31))
     tight = run_backtest(
         hist,
         params=LearnedParameters(batch_size=3, max_total_size_pct=2.0),
@@ -300,6 +298,7 @@ def test_render_backtest_comparison():
 
 # ---- signal strategy (slice 22) ------------------------------------------
 
+
 def _long_hist() -> PriceHistory:
     """~2 years of daily closes: AAA a steady uptrend, BBB flat."""
     start = date(2024, 1, 1)
@@ -321,8 +320,12 @@ WINDOW = dict(start=date(2026, 1, 1), end=date(2026, 3, 1))
 
 def test_signal_strategy_trades_only_signal_names():
     r = run_backtest(
-        LONG, params=LearnedParameters(), goal=GOAL, watchlist=["AAA", "BBB"],
-        use_signals=True, **WINDOW,
+        LONG,
+        params=LearnedParameters(),
+        goal=GOAL,
+        watchlist=["AAA", "BBB"],
+        use_signals=True,
+        **WINDOW,
     )
     assert r.strategy == "signals"
     assert r.num_trades > 0
@@ -331,28 +334,52 @@ def test_signal_strategy_trades_only_signal_names():
 
 
 def test_signal_strategy_is_deterministic():
-    a = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
-                     watchlist=["AAA", "BBB"], use_signals=True, **WINDOW)
-    b = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
-                     watchlist=["AAA", "BBB"], use_signals=True, **WINDOW)
+    a = run_backtest(
+        LONG,
+        params=LearnedParameters(),
+        goal=GOAL,
+        watchlist=["AAA", "BBB"],
+        use_signals=True,
+        **WINDOW,
+    )
+    b = run_backtest(
+        LONG,
+        params=LearnedParameters(),
+        goal=GOAL,
+        watchlist=["AAA", "BBB"],
+        use_signals=True,
+        **WINDOW,
+    )
     assert a == b
 
 
 def test_rotation_strategy_also_trades_flat_name():
-    r = run_backtest(LONG, params=LearnedParameters(), goal=GOAL,
-                     watchlist=["AAA", "BBB"], use_signals=False, **WINDOW)
+    r = run_backtest(
+        LONG,
+        params=LearnedParameters(),
+        goal=GOAL,
+        watchlist=["AAA", "BBB"],
+        use_signals=False,
+        **WINDOW,
+    )
     assert r.strategy == "rotation"
     assert any(t.ticker == "BBB" for t in r.trades)  # stub gives every pick a thesis
 
 
 # ---- costs, entry-lag, train/test split (slice 23) -----------------------
 
+
 def test_transaction_cost_reduces_pnl():
     r = run_backtest(
         CONTROLLED,
         params=LearnedParameters(batch_size=1, max_total_size_pct=20.0),
-        goal=GOAL, start=date(2026, 1, 1), end=date(2026, 1, 31),
-        holding_days=7, rebalance_every_days=7, watchlist=["AAA"], cost_bps=100.0,
+        goal=GOAL,
+        start=date(2026, 1, 1),
+        end=date(2026, 1, 31),
+        holding_days=7,
+        rebalance_every_days=7,
+        watchlist=["AAA"],
+        cost_bps=100.0,
     )
     # First trade was +10%; a 100bps (1%) round-trip cost nets +9%.
     assert abs(r.trades[0].pnl_pct - 9.0) < 1e-9
@@ -362,8 +389,7 @@ def test_transaction_cost_reduces_pnl():
 _DAILY = PriceHistory(
     series={
         "AAA": tuple(
-            ((date(2026, 1, 1) + timedelta(days=i)).isoformat(), 100.0 + i)
-            for i in range(10)
+            ((date(2026, 1, 1) + timedelta(days=i)).isoformat(), 100.0 + i) for i in range(10)
         )
     }
 )
@@ -372,8 +398,12 @@ _DAILY = PriceHistory(
 def test_entry_lag_shifts_entry_to_next_day():
     kw = dict(
         params=LearnedParameters(batch_size=1, max_total_size_pct=20.0),
-        goal=GOAL, start=date(2026, 1, 1), end=date(2026, 1, 2),
-        holding_days=1, rebalance_every_days=1, watchlist=["AAA"],
+        goal=GOAL,
+        start=date(2026, 1, 1),
+        end=date(2026, 1, 2),
+        holding_days=1,
+        rebalance_every_days=1,
+        watchlist=["AAA"],
     )
     base = run_backtest(_DAILY, **kw)
     lagged = run_backtest(_DAILY, entry_lag_days=1, **kw)
@@ -386,9 +416,13 @@ def test_entry_lag_shifts_entry_to_next_day():
 def test_split_backtest_partitions_window():
     hist = synthetic_history(["AAA", "BBB"], date(2026, 1, 1), date(2026, 6, 30))
     in_s, out_s = split_backtest(
-        hist, params=LearnedParameters(), goal=GOAL,
-        start=date(2026, 1, 1), end=date(2026, 6, 30),
-        oos_fraction=0.3, watchlist=["AAA", "BBB"],
+        hist,
+        params=LearnedParameters(),
+        goal=GOAL,
+        start=date(2026, 1, 1),
+        end=date(2026, 6, 30),
+        oos_fraction=0.3,
+        watchlist=["AAA", "BBB"],
     )
     assert in_s.start == "2026-01-01"
     assert out_s.end == "2026-06-30"
@@ -399,7 +433,11 @@ def test_split_backtest_rejects_bad_fraction():
     hist = synthetic_history(["AAA"], date(2026, 1, 1), date(2026, 2, 1))
     with pytest.raises(BacktestError):
         split_backtest(
-            hist, params=LearnedParameters(), goal=GOAL,
-            start=date(2026, 1, 1), end=date(2026, 2, 1),
-            oos_fraction=1.5, watchlist=["AAA"],
+            hist,
+            params=LearnedParameters(),
+            goal=GOAL,
+            start=date(2026, 1, 1),
+            end=date(2026, 2, 1),
+            oos_fraction=1.5,
+            watchlist=["AAA"],
         )

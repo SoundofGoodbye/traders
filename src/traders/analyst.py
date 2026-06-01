@@ -22,9 +22,7 @@ def _latest_research_run_id(conn: sqlite3.Connection) -> int | None:
     return int(row[0])
 
 
-def _notes_for_run(
-    conn: sqlite3.Connection, research_run_id: int
-) -> list[tuple[str, str]]:
+def _notes_for_run(conn: sqlite3.Connection, research_run_id: int) -> list[tuple[str, str]]:
     rows = conn.execute(
         "SELECT ticker, content FROM research_notes WHERE run_id = ? ORDER BY id",
         (research_run_id,),
@@ -48,11 +46,7 @@ def run(
     no research run to read from yet.
     """
     gen: ThesisGenerator = generator or StubThesisGenerator()
-    target = (
-        research_run_id
-        if research_run_id is not None
-        else _latest_research_run_id(conn)
-    )
+    target = research_run_id if research_run_id is not None else _latest_research_run_id(conn)
     if target is None:
         return 0, 0
     notes = _notes_for_run(conn, target)

@@ -346,9 +346,7 @@ class EdgarDataSource:
                 break
         return points
 
-    def _to_data_point(
-        self, ticker: str, form: str, item: dict[str, Any]
-    ) -> DataPoint:
+    def _to_data_point(self, ticker: str, form: str, item: dict[str, Any]) -> DataPoint:
         filing_date = str(item.get("filingDate") or "")[:10]
         accession = str(item.get("accessionNumber") or "")
         primary_doc = str(item.get("primaryDocument") or "")
@@ -360,14 +358,10 @@ class EdgarDataSource:
             )
         elif cik:
             url = (
-                "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
-                f"&CIK={cik}&type={form}"
+                f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik}&type={form}"
             )
         else:
-            url = (
-                "https://www.sec.gov/cgi-bin/browse-edgar?"
-                f"action=getcompany&company={ticker}"
-            )
+            url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={ticker}"
         published = filing_date or date.today().isoformat()
         return DataPoint(
             kind="filing",
@@ -386,6 +380,4 @@ def make_data_source(name: str) -> DataSource:
         return YFinanceDataSource()
     if name == "edgar":
         return EdgarDataSource()
-    raise ValueError(
-        f"unknown data source: {name!r} (expected 'stub', 'yfinance', or 'edgar')"
-    )
+    raise ValueError(f"unknown data source: {name!r} (expected 'stub', 'yfinance', or 'edgar')")

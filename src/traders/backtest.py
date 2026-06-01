@@ -122,9 +122,7 @@ def _rebalance_dates(start: date, end: date, step: int) -> list[date]:
     return out
 
 
-def _realize(
-    sim: _SimPosition, history: PriceHistory, cost_bps: float = 0.0
-) -> BacktestTrade:
+def _realize(sim: _SimPosition, history: PriceHistory, cost_bps: float = 0.0) -> BacktestTrade:
     exit_price = history.close_asof(sim.ticker, sim.exit_day)
     pnl = compute_pnl_pct(sim.direction, sim.entry_price, exit_price)
     if pnl is not None and cost_bps:
@@ -289,11 +287,20 @@ def split_backtest(
         raise BacktestError("window too short to split")
     split_day = start + timedelta(days=int(span * (1.0 - oos_fraction)))
     in_sample = run_backtest(
-        history, params=params, goal=goal, start=start, end=split_day, **kwargs  # type: ignore[arg-type]
+        history,
+        params=params,
+        goal=goal,
+        start=start,
+        end=split_day,
+        **kwargs,  # type: ignore[arg-type]
     )
     out_sample = run_backtest(
-        history, params=params, goal=goal, start=split_day + timedelta(days=1),
-        end=end, **kwargs,  # type: ignore[arg-type]
+        history,
+        params=params,
+        goal=goal,
+        start=split_day + timedelta(days=1),
+        end=end,
+        **kwargs,  # type: ignore[arg-type]
     )
     return in_sample, out_sample
 

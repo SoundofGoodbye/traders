@@ -76,9 +76,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             request=request, name=name, context={**context, "csrf_token": token}
         )
         if cookie_value is not None:
-            response.set_cookie(
-                csrf.COOKIE_NAME, cookie_value, httponly=True, samesite="strict"
-            )
+            response.set_cookie(csrf.COOKIE_NAME, cookie_value, httponly=True, samesite="strict")
         return response
 
     async def check_csrf(request: Request) -> None:
@@ -121,9 +119,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
         picks = queries.picks_for_run(conn, pm_run_id) if pm_run_id is not None else []
         scout_run_id = queries.latest_scout_run_id(conn)
         candidates = (
-            queries.candidates_for_run(conn, scout_run_id)
-            if scout_run_id is not None
-            else []
+            queries.candidates_for_run(conn, scout_run_id) if scout_run_id is not None else []
         )
         return templates.TemplateResponse(
             request=request,
@@ -204,8 +200,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
                 "thesis": thesis,
                 "notes": queries.notes_for_thesis(conn, thesis),
                 "backlinks": queries.backlinks_for_thesis(conn, thesis_id),
-                "has_open_position": queries.open_position_for_thesis(conn, thesis_id)
-                is not None,
+                "has_open_position": queries.open_position_for_thesis(conn, thesis_id) is not None,
             },
         )
 
@@ -266,9 +261,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
         price = form_float(form.get("price"), "price")
         notes = form.get("notes") or None
         apply_feedback(
-            lambda c: feedback.record_sell(
-                c, price=price, position_id=position_id, notes=notes
-            )
+            lambda c: feedback.record_sell(c, price=price, position_id=position_id, notes=notes)
         )
         return redirect("/positions")
 

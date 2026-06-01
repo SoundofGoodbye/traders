@@ -130,9 +130,7 @@ def load_history_from_db(
     return PriceHistory(series={t: tuple(v) for t, v in series.items()})
 
 
-def save_prices(
-    conn: sqlite3.Connection, ticker: str, closes: list[tuple[str, float]]
-) -> int:
+def save_prices(conn: sqlite3.Connection, ticker: str, closes: list[tuple[str, float]]) -> int:
     """Upsert ``(day, close)`` rows for one ticker. Returns rows written."""
     conn.executemany(
         "INSERT OR REPLACE INTO prices (ticker, day, close) VALUES (?, ?, ?)",

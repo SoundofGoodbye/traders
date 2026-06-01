@@ -24,7 +24,9 @@ def _seed(db_path, tmp_path, tickers=("AAA", "BBB")):
     apply_migrations(conn, MIGRATIONS)
     wl = tmp_path / "wl.json"
     wl.write_text(json.dumps({"sp100": list(tickers), "eurostoxx50": []}))
-    scout_id, _ = scout_run(conn, watchlist_path=wl, run_date=date(2026, 5, 20), batch_size=len(tickers))
+    scout_id, _ = scout_run(
+        conn, watchlist_path=wl, run_date=date(2026, 5, 20), batch_size=len(tickers)
+    )
     research_id, _ = research_run(conn, scout_run_id=scout_id)
     analyst_id, _ = analyst_run(conn, research_run_id=research_id)
     pm_run(conn, analyst_run_id=analyst_id)

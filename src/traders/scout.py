@@ -141,8 +141,7 @@ def run(
     run_id = _next_run_id(conn)
     created_at = datetime.now(timezone.utc).isoformat()
     conn.executemany(
-        "INSERT INTO candidates (ticker, scout_run_id, reason, created_at)"
-        " VALUES (?, ?, ?, ?)",
+        "INSERT INTO candidates (ticker, scout_run_id, reason, created_at) VALUES (?, ?, ?, ?)",
         [(t, run_id, reason, created_at) for t in picks],
     )
     conn.commit()

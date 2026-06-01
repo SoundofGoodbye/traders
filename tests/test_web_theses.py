@@ -140,9 +140,7 @@ def test_thesis_detail_hides_fill_form_when_position_open(tmp_path):
     conn = connect(db_path)
     apply_migrations(conn, MIGRATIONS)
     _seed(conn, tmp_path, ["ZZZ"], date(2026, 5, 21))
-    thesis_id = conn.execute(
-        "SELECT id FROM theses WHERE ticker = 'ZZZ' LIMIT 1"
-    ).fetchone()[0]
+    thesis_id = conn.execute("SELECT id FROM theses WHERE ticker = 'ZZZ' LIMIT 1").fetchone()[0]
     record_fill(conn, thesis_id=thesis_id, price=100.0)  # left open, no sell
     conn.close()
 

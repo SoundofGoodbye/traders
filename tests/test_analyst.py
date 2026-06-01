@@ -35,9 +35,7 @@ def db(tmp_path):
 def _seed_research(db, tmp_path, tickers, run_date):
     wl_path = tmp_path / f"wl_{run_date.isoformat()}.json"
     wl_path.write_text(json.dumps({"sp100": tickers, "eurostoxx50": []}))
-    scout_id, _ = scout_run(
-        db, watchlist_path=wl_path, run_date=run_date, batch_size=len(tickers)
-    )
+    scout_id, _ = scout_run(db, watchlist_path=wl_path, run_date=run_date, batch_size=len(tickers))
     research_id, _ = research_run(db, scout_run_id=scout_id)
     return research_id
 
@@ -55,16 +53,17 @@ def _draft(thesis_type="value", direction="long", conviction=3, size=2.0):
 
 def test_run_writes_one_thesis_per_draft(db, tmp_path):
     research_id = _seed_research(db, tmp_path, ["AAA", "BBB"], date(2026, 5, 20))
-    fake = FakeGenerator({
-        "AAA": [_draft(thesis_type="value")],
-        "BBB": [_draft(thesis_type="momentum"), _draft(thesis_type="catalyst")],
-    })
+    fake = FakeGenerator(
+        {
+            "AAA": [_draft(thesis_type="value")],
+            "BBB": [_draft(thesis_type="momentum"), _draft(thesis_type="catalyst")],
+        }
+    )
     run_id, n = analyst_run(db, generator=fake, research_run_id=research_id)
     assert run_id == 1
     assert n == 3
     rows = db.execute(
-        "SELECT ticker, thesis_type, status, run_id, research_run_id"
-        " FROM theses ORDER BY id"
+        "SELECT ticker, thesis_type, status, run_id, research_run_id FROM theses ORDER BY id"
     ).fetchall()
     assert len(rows) == 3
     by_ticker = {}
@@ -79,16 +78,20 @@ def test_run_writes_one_thesis_per_draft(db, tmp_path):
 
 def test_run_persists_all_thesis_fields(db, tmp_path):
     research_id = _seed_research(db, tmp_path, ["AAA"], date(2026, 5, 20))
-    fake = FakeGenerator({
-        "AAA": [DraftThesis(
-            thesis_type="catalyst",
-            direction="short",
-            conviction=5,
-            suggested_size_pct=3.5,
-            exit_condition="cover at +20%",
-            rationale="earnings miss expected",
-        )]
-    })
+    fake = FakeGenerator(
+        {
+            "AAA": [
+                DraftThesis(
+                    thesis_type="catalyst",
+                    direction="short",
+                    conviction=5,
+                    suggested_size_pct=3.5,
+                    exit_condition="cover at +20%",
+                    rationale="earnings miss expected",
+                )
+            ]
+        }
+    )
     analyst_run(db, generator=fake, research_run_id=research_id)
     row = db.execute(
         "SELECT ticker, thesis_type, direction, conviction, suggested_size_pct,"
@@ -123,9 +126,7 @@ def test_run_defaults_to_latest_research_run(db, tmp_path):
     fake = FakeGenerator({"AAA": [_draft()], "CCC": [_draft()]})
     _, n = analyst_run(db, generator=fake)
     assert n == 1
-    rows = db.execute(
-        "SELECT ticker, research_run_id FROM theses"
-    ).fetchall()
+    rows = db.execute("SELECT ticker, research_run_id FROM theses").fetchall()
     assert rows == [("CCC", latest)]
 
 

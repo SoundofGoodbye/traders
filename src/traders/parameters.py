@@ -26,12 +26,8 @@ import json
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
-_PACKAGED_DEFAULT = (
-    Path(__file__).resolve().parent / "data" / "parameters.default.json"
-)
-_OVERRIDE = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "learned_parameters.json"
-)
+_PACKAGED_DEFAULT = Path(__file__).resolve().parent / "data" / "parameters.default.json"
+_OVERRIDE = Path(__file__).resolve().parent.parent.parent / "data" / "learned_parameters.json"
 
 
 @dataclass(frozen=True)
