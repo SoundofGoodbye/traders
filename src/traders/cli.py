@@ -177,10 +177,11 @@ def main(argv: list[str] | None = None) -> None:
     )
     analyse.add_argument(
         "--generator",
-        choices=("stub", "signals"),
+        choices=("stub", "signals", "llm"),
         default="stub",
-        help="Thesis generator: 'stub' (canned) or 'signals' (price-driven; "
-        "needs ingested prices). Default: stub.",
+        help="Thesis generator: 'stub' (canned), 'signals' (price/fundamental-driven; "
+        "needs ingested data), or 'llm' (Claude; needs the 'llm' extra + "
+        "ANTHROPIC_API_KEY). Default: stub.",
     )
 
     pm = sub.add_parser("pm", help="Run the Portfolio Manager")
@@ -254,9 +255,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     daily.add_argument(
         "--generator",
-        choices=("stub", "signals"),
+        choices=("stub", "signals", "llm"),
         default="stub",
-        help="Thesis generator: 'stub' or 'signals' (price-driven). Default: stub.",
+        help="Thesis generator: 'stub', 'signals' (price/fundamental-driven), or "
+        "'llm' (Claude; needs the 'llm' extra + ANTHROPIC_API_KEY). Default: stub.",
     )
     daily.add_argument(
         "--rank",
@@ -629,6 +631,10 @@ def main(argv: list[str] | None = None) -> None:
             from traders.signals_thesis import build_signal_generator
 
             generator = build_signal_generator(conn)
+        elif args.generator == "llm":
+            from traders.llm_thesis import LLMThesisGenerator
+
+            generator = LLMThesisGenerator()
         run_id, n_theses = analyst_run(
             conn, generator=generator, research_run_id=args.research_run_id
         )
@@ -683,6 +689,10 @@ def main(argv: list[str] | None = None) -> None:
             from traders.signals_thesis import build_signal_generator
 
             generator = build_signal_generator(conn)
+        elif args.generator == "llm":
+            from traders.llm_thesis import LLMThesisGenerator
+
+            generator = LLMThesisGenerator()
         scout_history = None
         if args.rank == "signals":
             from traders.prices import load_history_from_db

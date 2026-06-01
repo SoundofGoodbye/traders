@@ -6,7 +6,7 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 
 - **Scout** — shipped; date-seeded rotation by default, opt-in price-signal ranking (slice 21).
 - **Researcher** — shipped; stub data source by default, opt-in yfinance/EDGAR adapters.
-- **Analyst** — shipped; stub thesis generator by default, opt-in signal-driven generator (slice 20), both behind a stable protocol.
+- **Analyst** — shipped; stub thesis generator by default, opt-in signal-driven (slice 20) or LLM-backed (Claude, slice 27) generators, all behind a stable protocol.
 - **Portfolio Manager** — shipped; persists accept/reject decisions and renders a daily report.
 - **Reviewer** (weekly) — shipped; walks closed positions and writes post-mortems.
 - **Data sources** — shipped; `stub` default plus opt-in `yfinance` (news/fundamentals) and `edgar` (SEC filings).
@@ -21,7 +21,7 @@ Agent-driven stock research and advisory system. Daily cadence over an S&P 100 +
 
 - **Scout** — filters the watchlist down to a small daily candidate set. Date-seeded rotation by default; opt-in price-signal ranking (`--rank signals`) once prices are ingested.
 - **Researcher** — per-candidate digest of filings, news, fundamentals into `research_notes` with cited sources.
-- **Analyst** — turns each note into zero-or-more theses (type, direction, conviction, suggested size, exit condition). Stub generator by default; opt-in signal-driven generator (`--generator signals`).
+- **Analyst** — turns each note into zero-or-more theses (type, direction, conviction, suggested size, exit condition). Stub generator by default; opt-in `--generator signals` (price/fundamental-driven) or `--generator llm` (Claude, structured-output tool call).
 - **Portfolio Manager** — final filter over the day's theses against open positions; persists per-thesis accept/reject decisions and emits a daily summary.
 - **Reviewer** (weekly) — walks closed positions and writes post-mortems.
 
@@ -84,6 +84,19 @@ The default install does **not** include yfinance — keep the footprint empty u
 
 Both adapters degrade gracefully: network errors, rate limits, or missing fields produce an empty list of data points rather than raising, so a single flaky ticker can't kill the run. There is no caching layer — once per close is well within both services' tolerances.
 
+## LLM theses
+
+The Analyst can ask Claude for theses instead of the deterministic generators, behind the `llm` extra:
+
+```bash
+uv sync --extra llm
+export ANTHROPIC_API_KEY="sk-ant-..."
+export TRADERS_LLM_MODEL="claude-sonnet-4-6"             # optional; this is the default
+uv run traders analyse --generator llm                  # or: run-daily --generator llm
+```
+
+`LLMThesisGenerator` forces a structured-output tool call so the model always returns a valid thesis (or an explicit decline), never free text. The research note is treated as **untrusted** — wrapped as delimited data with a system instruction never to follow its contents, the tool-only response constrains the output to the schema, and the result is validated and clamped before it is stored. The paper-only and human `--apply` gates are unchanged. The default install does not include `anthropic`; the test suite injects a fake client and stays fully offline.
+
 ## Web UI
 
 A local, server-rendered FastAPI + Jinja2 UI lives behind the `web` extra:
@@ -116,7 +129,7 @@ The same machinery backs the **apply gate** (slice 24): `traders optimize --appl
 
 ## Current limitations
 
-- **No LLM generators yet.** Deterministic generators ship today — `StubThesisGenerator`, the slice-20 `SignalThesisGenerator` (price-driven), and `StubPostMortemGenerator`. The `ThesisGenerator` / `PostMortemGenerator` protocols are stable; model-backed implementations drop in behind them in slices 27–29.
+- **LLM path is partial.** The thesis generator now has a Claude-backed option (`LLMThesisGenerator`, slice 27, behind the `llm` extra); the Reviewer's post-mortem write-up is still `StubPostMortemGenerator`. An `LLMPostMortemGenerator` (slice 28) and an eval harness that gates LLM output quality (slice 29) drop in behind the same stable protocols.
 - **Quality & PEAD signals deferred.** Value (E/P, B/P, FCF/P) and earnings-proximity are wired into the signal thesis generator (slice 26), but a full Piotroski quality score (needs year-over-year statements) and post-earnings drift / SUE (needs consensus estimates) need richer fundamentals than a single yfinance snapshot — both wait on period-by-period statement ingestion.
 - **Scout defaults to date rotation.** Price-signal ranking is opt-in (`--rank signals`) and falls back to rotation when no prices are ingested, so the zero-data path still works.
 - **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing (post-close daily, weekly review) is left to the operator — wire them to cron, systemd timers, or whatever the host runs.

@@ -863,3 +863,49 @@ def test_cli_ingest_fundamentals_without_realdata_exits_cleanly(tmp_path):
     with pytest.raises(SystemExit) as exc:
         main(["ingest-fundamentals", "--db", str(db), "--ticker", "AAA", "--delay", "0"])
     assert "realdata" in str(exc.value)
+
+
+# ---- analyse --generator llm (slice 27) ----------------------------------
+
+
+def test_cli_analyse_llm_generator(tmp_path, capsys, monkeypatch):
+    # Patch the real client construction with a fake so the CLI path is hermetic.
+    from types import SimpleNamespace
+
+    import traders.llm_thesis as llm_thesis
+
+    tool_input = {
+        "actionable": True,
+        "thesis_type": "value",
+        "direction": "long",
+        "conviction": 4,
+        "suggested_size_pct": 3.0,
+        "exit_condition": "re-rate to peers or a -8% stop",
+        "rationale": "cheap on cash flow",
+    }
+
+    def fake_resolve(self):
+        def create(**kwargs):
+            block = SimpleNamespace(type="tool_use", input=tool_input)
+            return SimpleNamespace(content=[block])
+
+        return SimpleNamespace(messages=SimpleNamespace(create=create))
+
+    monkeypatch.setattr(llm_thesis.LLMThesisGenerator, "_resolve_client", fake_resolve)
+
+    db = tmp_path / "t.db"
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAA"], "eurostoxx50": []}))
+    main(["scout", "--db", str(db), "--watchlist", str(wl), "--batch-size", "1"])
+    main(["research", "--db", str(db)])
+    capsys.readouterr()
+    main(["analyse", "--db", str(db), "--generator", "llm"])
+    out = capsys.readouterr().out
+    assert "generator: llm" in out
+    assert "1 thesis" in out
+    conn = sqlite3.connect(db)
+    row = conn.execute("SELECT thesis_type, direction, rationale FROM theses").fetchone()
+    conn.close()
+    assert row[0] == "value"
+    assert row[1] == "long"
+    assert row[2].startswith("[llm]")

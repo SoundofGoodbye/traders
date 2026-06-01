@@ -45,7 +45,7 @@ those LLM slices need. Both stay **behind an optional `llm` extra**, never in co
 | 24 | Optimizer OOS gate + trial-count deflation (PSR/DSR) | CORE | `Optimizer`/metrics | none | M | ✅ shipped |
 | 25 | yfinance **fundamentals** → `fundamentals` table | NETWORK | `DataSource` | `realdata` | M | ✅ shipped |
 | 26 | Fundamental & catalyst signals (value + earnings-proximity) | CORE | extends 18/20 | none | M | ✅ shipped |
-| 27 | `LLMThesisGenerator` (structured-output tool call) | LLM | `ThesisGenerator` | `llm` | M | planned |
+| 27 | `LLMThesisGenerator` (structured-output tool call) | LLM | `ThesisGenerator` | `llm` | M | ✅ shipped |
 | 28 | `LLMPostMortemGenerator` | LLM | `PostMortemGenerator` | `llm` | S | planned |
 | 29 | Eval harness for the LLM generators | LLM | (eval) | `llm` | M | planned |
 
@@ -112,13 +112,12 @@ everything 18–26 build (incl. the eval loop that keeps it honest).
   risk. *Deferred* (not computable from a single slice-25 snapshot): quality
   (Piotroski F-score, needs period-by-period statements) and PEAD/SUE (needs
   consensus estimates) — both wait on richer fundamentals ingestion.
-- **27–29 LLM path.** `LLMThesisGenerator` / `LLMPostMortemGenerator` behind an
-  `llm` extra (anthropic SDK), forcing a valid `DraftThesis` via a
-  structured-output tool call, with prompt caching on the system prompt and an
-  eval harness (cookbooks recipe) gating quality. Inject a fake client in tests
-  so the suite stays hermetic and offline. Treat ingested news/filings as
-  untrusted input (prompt-injection defense — see the `llm-trading-agent-security`
-  guidance).
+- **27–29 LLM path.** *Shipped (27):* `LLMThesisGenerator` behind the `llm` extra
+  (anthropic SDK), forcing a valid `DraftThesis` via a structured-output tool call,
+  with prompt caching on the system prompt, an injected fake client in tests
+  (hermetic/offline), and prompt-injection defense on the untrusted note (see the
+  `llm-trading-agent-security` guidance). *Remaining:* `LLMPostMortemGenerator` (28)
+  on the same pattern, and an eval harness (29, cookbooks recipe) gating quality.
 
 ## Premortem — failure modes & the guardrails that prevent them
 

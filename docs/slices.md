@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–26 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–27 are shipped.** The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -172,11 +172,16 @@ Gates `optimize --apply` on an **out-of-sample** backtest so the slice-16 Optimi
 
 Adds fundamental signal math to `signals_lib` and wires it into the `SignalThesisGenerator`. Value signals — `earnings_yield` (E/P), `book_to_price` (B/P), `fcf_yield` (FCF/market-cap) — join a look-ahead-safe slice-25 snapshot against the last close before the decision day; a name cheap on ≥2 of the three flags yields a long `value` thesis. `days_to_earnings` annotates whatever thesis fires with an event-risk note when earnings are imminent (≤7d) — a proximity flag, not a directional call. The generator gains an optional `fundamentals` map (resolved per as-of by `fundamentals.load_fundamentals_asof`); family priority is momentum → value → mean-reversion. **Additive by construction:** with no fundamentals (every historical backtest — snapshots aren't point-in-time history — and the default tests) behaviour is byte-identical to slice 20. `traders analyse --generator signals` / `run-daily --generator signals` pick up ingested fundamentals automatically. Deferred (not computable from a single snapshot): the full **Piotroski F-score** (needs period-by-period statements) and **PEAD/SUE** (needs consensus estimates). No migration, no new dependency.
 
+## Slice 27 — LLMThesisGenerator
+
+`traders.llm_thesis.LLMThesisGenerator` implements the `ThesisGenerator` protocol — it drops into the Analyst like the stub/signal generators (no agent changes) and asks Claude to read the research note and propose a thesis via a **forced structured-output tool call** (`tool_choice` → `record_thesis`), so the response is always a valid `DraftThesis` or an explicit decline (`actionable=false`), never free text. The static system prompt is sent as a cached block (`cache_control: ephemeral`). Behind the optional `llm` extra (`anthropic`); the client is **injected**, so the default suite stays hermetic — tests pass a fake client (no `anthropic` import, no API key, no network) and only the real default client imports the SDK and reads `ANTHROPIC_API_KEY` (failing fast if the extra is missing, returning `[]` on a per-call API error). Security: the untrusted note is wrapped in `<research_note>` delimiters with a system instruction never to follow its contents, the tool-only response constrains output to the schema, the result is validated/clamped in Python, and the paper-only / human `--apply` gates stay in force. `traders analyse --generator llm` / `run-daily --generator llm`; `TRADERS_LLM_MODEL` overrides the model. No migration.
+
 ## Proposed — remaining improvement plan
 
-Full rationale, ordering, and premortem in [improvements.md](improvements.md). Only the LLM path remains: it needs a new optional dependency (the `llm` extra), so it sits at the boundary of what's autonomously testable offline (kept hermetic via an injected fake client).
+Full rationale, ordering, and premortem in [improvements.md](improvements.md). What remains is the rest of the LLM path (the `llm` extra), kept hermetic via an injected fake client:
 
-- **Slices 27–29 — LLM path** (`llm` extra, planned): `LLMThesisGenerator` / `LLMPostMortemGenerator` via structured-output tool calls (force a valid `DraftThesis`), prompt caching, and an eval harness; hermetic via an injected fake client. Treat ingested news/filings as untrusted (prompt-injection defense).
+- **Slice 28 — `LLMPostMortemGenerator`** (`llm` extra, planned): the Reviewer's post-mortem write-up behind the `PostMortemGenerator` protocol, same injected-client + structured-output pattern as slice 27.
+- **Slice 29 — Eval harness for the LLM generators** (`llm` extra, planned): score the LLM thesis/post-mortem output against fixtures so quality regressions are caught; the loop that keeps the LLM path honest.
 
 ## Future
 
