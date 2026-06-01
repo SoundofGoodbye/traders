@@ -88,6 +88,8 @@ class BacktestResult:
     batch_size: int
     max_total_size_pct: float
     strategy: str
+    cost_bps: float
+    entry_lag_days: int
     rebalance_count: int
     num_trades: int
     skipped_no_price: int
@@ -120,9 +122,13 @@ def _rebalance_dates(start: date, end: date, step: int) -> list[date]:
     return out
 
 
-def _realize(sim: _SimPosition, history: PriceHistory) -> BacktestTrade:
+def _realize(
+    sim: _SimPosition, history: PriceHistory, cost_bps: float = 0.0
+) -> BacktestTrade:
     exit_price = history.close_asof(sim.ticker, sim.exit_day)
     pnl = compute_pnl_pct(sim.direction, sim.entry_price, exit_price)
+    if pnl is not None and cost_bps:
+        pnl -= cost_bps / 100.0  # round-trip cost: bps -> percent
     return BacktestTrade(
         ticker=sim.ticker,
         direction=sim.direction,
@@ -150,6 +156,8 @@ def run_backtest(
     generator: ThesisGenerator | None = None,
     use_signals: bool = False,
     signal_kwargs: dict | None = None,
+    cost_bps: float = 0.0,
+    entry_lag_days: int = 0,
 ) -> BacktestResult:
     """Replay the pipeline over ``history`` with ``params`` and score it.
 
@@ -177,7 +185,7 @@ def run_backtest(
     for today in rebal:
         # 1. Close positions whose holding period has elapsed.
         for ticker in [t for t, sp in open_pos.items() if sp.exit_day <= today]:
-            closed.append(_realize(open_pos.pop(ticker), history))
+            closed.append(_realize(open_pos.pop(ticker), history, cost_bps))
 
         # 2. Decide — the exact live primitives, in order.
         if use_signals:
@@ -205,7 +213,8 @@ def run_backtest(
 
         # 3. Open each accepted pick at the as-of close.
         for item in accepted:
-            entry = history.close_asof(item.ticker, today)
+            entry_day = today + timedelta(days=entry_lag_days)
+            entry = history.close_asof(item.ticker, entry_day)
             if entry is None:
                 skipped += 1
                 continue
@@ -215,14 +224,14 @@ def run_backtest(
                 thesis_type=item.thesis_type,
                 conviction=item.conviction,
                 size_pct=item.suggested_size_pct,
-                entry_day=today,
+                entry_day=entry_day,
                 entry_price=entry,
-                exit_day=today + timedelta(days=holding_days),
+                exit_day=entry_day + timedelta(days=holding_days),
             )
 
     # Realize anything still open at its scheduled exit.
     for ticker in list(open_pos):
-        closed.append(_realize(open_pos.pop(ticker), history))
+        closed.append(_realize(open_pos.pop(ticker), history, cost_bps))
 
     # Order oldest-close-first so drawdown is deterministic and meaningful.
     closed.sort(key=lambda t: (t.exit_day, t.entry_day, t.ticker))
@@ -245,6 +254,8 @@ def run_backtest(
         batch_size=params.batch_size,
         max_total_size_pct=params.max_total_size_pct,
         strategy=strategy,
+        cost_bps=cost_bps,
+        entry_lag_days=entry_lag_days,
         rebalance_count=len(rebal),
         num_trades=len(closed),
         skipped_no_price=skipped,
@@ -253,6 +264,38 @@ def run_backtest(
         scorecard=card,
         trades=tuple(closed),
     )
+
+
+def split_backtest(
+    history: PriceHistory,
+    *,
+    params: LearnedParameters,
+    goal: StrategyGoal,
+    start: date,
+    end: date,
+    oos_fraction: float = 0.3,
+    **kwargs: object,
+) -> tuple[BacktestResult, BacktestResult]:
+    """Split the window into in-sample / out-of-sample and backtest each.
+
+    The first ``1 - oos_fraction`` of the calendar span is in-sample; the rest is
+    out-of-sample. A strategy that scores well in-sample but not out-of-sample is
+    overfit — this is the core guardrail against tuning on the scoring history.
+    """
+    if not 0.0 < oos_fraction < 1.0:
+        raise BacktestError(f"oos_fraction must be in (0, 1), got {oos_fraction}")
+    span = (end - start).days
+    if span < 2:
+        raise BacktestError("window too short to split")
+    split_day = start + timedelta(days=int(span * (1.0 - oos_fraction)))
+    in_sample = run_backtest(
+        history, params=params, goal=goal, start=start, end=split_day, **kwargs  # type: ignore[arg-type]
+    )
+    out_sample = run_backtest(
+        history, params=params, goal=goal, start=split_day + timedelta(days=1),
+        end=end, **kwargs,  # type: ignore[arg-type]
+    )
+    return in_sample, out_sample
 
 
 def compare_params(

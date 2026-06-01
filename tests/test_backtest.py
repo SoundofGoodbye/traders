@@ -13,6 +13,7 @@ from traders.backtest import (
     backtest_experiment,
     compare_params,
     run_backtest,
+    split_backtest,
 )
 from traders.db import apply_migrations
 from traders.optimizer import propose_experiment
@@ -342,3 +343,63 @@ def test_rotation_strategy_also_trades_flat_name():
                      watchlist=["AAA", "BBB"], use_signals=False, **WINDOW)
     assert r.strategy == "rotation"
     assert any(t.ticker == "BBB" for t in r.trades)  # stub gives every pick a thesis
+
+
+# ---- costs, entry-lag, train/test split (slice 23) -----------------------
+
+def test_transaction_cost_reduces_pnl():
+    r = run_backtest(
+        CONTROLLED,
+        params=LearnedParameters(batch_size=1, max_total_size_pct=20.0),
+        goal=GOAL, start=date(2026, 1, 1), end=date(2026, 1, 31),
+        holding_days=7, rebalance_every_days=7, watchlist=["AAA"], cost_bps=100.0,
+    )
+    # First trade was +10%; a 100bps (1%) round-trip cost nets +9%.
+    assert abs(r.trades[0].pnl_pct - 9.0) < 1e-9
+    assert r.cost_bps == 100.0
+
+
+_DAILY = PriceHistory(
+    series={
+        "AAA": tuple(
+            ((date(2026, 1, 1) + timedelta(days=i)).isoformat(), 100.0 + i)
+            for i in range(10)
+        )
+    }
+)
+
+
+def test_entry_lag_shifts_entry_to_next_day():
+    kw = dict(
+        params=LearnedParameters(batch_size=1, max_total_size_pct=20.0),
+        goal=GOAL, start=date(2026, 1, 1), end=date(2026, 1, 2),
+        holding_days=1, rebalance_every_days=1, watchlist=["AAA"],
+    )
+    base = run_backtest(_DAILY, **kw)
+    lagged = run_backtest(_DAILY, entry_lag_days=1, **kw)
+    assert base.trades[0].entry_day == "2026-01-01"
+    assert base.trades[0].entry_price == 100.0
+    assert lagged.trades[0].entry_day == "2026-01-02"
+    assert lagged.trades[0].entry_price == 101.0
+
+
+def test_split_backtest_partitions_window():
+    hist = synthetic_history(["AAA", "BBB"], date(2026, 1, 1), date(2026, 6, 30))
+    in_s, out_s = split_backtest(
+        hist, params=LearnedParameters(), goal=GOAL,
+        start=date(2026, 1, 1), end=date(2026, 6, 30),
+        oos_fraction=0.3, watchlist=["AAA", "BBB"],
+    )
+    assert in_s.start == "2026-01-01"
+    assert out_s.end == "2026-06-30"
+    assert in_s.end < out_s.start  # disjoint, in-sample first
+
+
+def test_split_backtest_rejects_bad_fraction():
+    hist = synthetic_history(["AAA"], date(2026, 1, 1), date(2026, 2, 1))
+    with pytest.raises(BacktestError):
+        split_backtest(
+            hist, params=LearnedParameters(), goal=GOAL,
+            start=date(2026, 1, 1), end=date(2026, 2, 1),
+            oos_fraction=1.5, watchlist=["AAA"],
+        )

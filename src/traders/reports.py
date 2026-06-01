@@ -198,7 +198,8 @@ def render_backtest(result, fmt: str = "text") -> str:
             f"({result.rebalance_count} rebalances, {result.holding_days}d hold)  ",
             f"**Params:** batch_size={result.batch_size}, "
             f"max_total_size_pct={result.max_total_size_pct} "
-            f"({result.strategy} strategy)  ",
+            f"({result.strategy} strategy, {result.cost_bps}bps cost, "
+            f"{result.entry_lag_days}d lag)  ",
             f"**Trades:** {result.num_trades} "
             f"(entry-skipped {result.skipped_no_price}, "
             f"unpriced {result.unpriced_trades})",
@@ -210,7 +211,9 @@ def render_backtest(result, fmt: str = "text") -> str:
         f"  window: {result.start} -> {result.end} "
         f"({result.rebalance_count} rebalances, hold {result.holding_days}d)",
         f"  params: batch_size={result.batch_size}, "
-        f"max_total_size_pct={result.max_total_size_pct} ({result.strategy} strategy)",
+        f"max_total_size_pct={result.max_total_size_pct} "
+        f"({result.strategy} strategy, {result.cost_bps}bps cost, "
+        f"{result.entry_lag_days}d lag)",
         f"  trades: {result.num_trades} "
         f"(entry-skipped {result.skipped_no_price}, "
         f"unpriced {result.unpriced_trades})",

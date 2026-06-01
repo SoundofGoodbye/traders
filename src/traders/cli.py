@@ -272,6 +272,26 @@ def main(argv: list[str] | None = None) -> None:
         "--rebalance-days", type=int, default=None, help="Days between rebalances"
     )
     backtest_p.add_argument(
+        "--cost-bps",
+        type=float,
+        default=0.0,
+        help="Round-trip transaction cost per trade, in basis points (default: 0)",
+    )
+    backtest_p.add_argument(
+        "--entry-lag-days",
+        type=int,
+        default=0,
+        help="Enter this many days after the decision close (removes same-close "
+        "optimism; default: 0)",
+    )
+    backtest_p.add_argument(
+        "--oos-fraction",
+        type=float,
+        default=0.0,
+        help="If >0, split the window and report in-sample vs out-of-sample "
+        "(overfitting check; e.g. 0.3)",
+    )
+    backtest_p.add_argument(
         "--batch-size", type=int, default=None, help="Override Scout batch size"
     )
     backtest_p.add_argument(
@@ -634,6 +654,7 @@ def main(argv: list[str] | None = None) -> None:
             BacktestError,
             backtest_experiment,
             run_backtest,
+            split_backtest,
         )
         from traders.parameters import load_parameters
         from traders.prices import load_history_from_db, synthetic_history
@@ -686,6 +707,8 @@ def main(argv: list[str] | None = None) -> None:
             rebalance_every_days=rebal,
             watchlist=watchlist,
             use_signals=(args.strategy == "signals"),
+            cost_bps=args.cost_bps,
+            entry_lag_days=args.entry_lag_days,
         )
         try:
             if args.compare_experiment is not None:
@@ -696,6 +719,18 @@ def main(argv: list[str] | None = None) -> None:
                     render_backtest_comparison(baseline, candidate, fmt=args.fmt),
                     args.output,
                 )
+            elif args.oos_fraction > 0:
+                in_s, out_s = split_backtest(
+                    history, params=params, oos_fraction=args.oos_fraction, **common
+                )
+                heading = "## " if args.fmt == "markdown" else ""
+                parts = [
+                    f"{heading}In-sample",
+                    render_backtest(in_s, fmt=args.fmt),
+                    f"{heading}Out-of-sample",
+                    render_backtest(out_s, fmt=args.fmt),
+                ]
+                _emit("\n".join(parts) + "\n", args.output)
             else:
                 result = run_backtest(history, params=params, **common)
                 _emit(render_backtest(result, fmt=args.fmt), args.output)
