@@ -159,7 +159,12 @@ The same machinery backs the **apply gate** (slice 24): `traders optimize --appl
 
 - **Quality & PEAD signals deferred.** Value (E/P, B/P, FCF/P) and earnings-proximity are wired into the signal thesis generator (slice 26), but a full Piotroski quality score (needs year-over-year statements) and post-earnings drift / SUE (needs consensus estimates) need richer fundamentals than a single yfinance snapshot — both wait on period-by-period statement ingestion.
 - **Scout defaults to date rotation.** Price-signal ranking is opt-in (`--rank signals`) and falls back to rotation when no prices are ingested, so the zero-data path still works.
-- **No in-process scheduler.** `run-daily` and `run-weekly` chain the agents end-to-end, but timing is left to the operator. `scripts/daily-run.sh` is an optional cron-friendly wrapper (refresh prices → run the day's pipeline, logging to `data/cron.log`); point cron at it, e.g. `0 8 * * 1-5 /path/to/traders/scripts/daily-run.sh` (adjust for your timezone and when EOD prices settle).
+- **No in-process scheduler.** `run-daily` / `run-weekly` chain the agents end-to-end, but timing is left to the operator. Two optional cron-friendly wrappers log to `data/cron.log` and auto-load `.env`: `scripts/daily-run.sh` (refresh prices → run the day's pipeline) and `scripts/weekly-run.sh` (Reviewer post-mortems, LLM-backed). Point cron at them, e.g.:
+  ```
+  0 8 * * 1-5  /path/to/traders/scripts/daily-run.sh    # weekday daily run
+  0 9 * * 6    /path/to/traders/scripts/weekly-run.sh   # Saturday weekly review
+  ```
+  Adjust the times for your timezone and when EOD prices settle.
 - **No caching across runs.** Real data comes from yfinance and SEC EDGAR today; FMP, Polygon, and paid news APIs are future slices. No cross-run cache yet — if rate limits start to bite, that's the trigger to add one.
 
 ## Running
