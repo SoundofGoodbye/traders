@@ -308,6 +308,19 @@ def thesis_headline(thesis: Thesis) -> str:
     return f"{_verb(thesis.direction)} {thesis.ticker} {tail}".strip()
 
 
+def describe_position(direction: str | None) -> str:
+    """Plain, past-tense word for an open/closed position's direction.
+
+    A position already exists, so this reads as what you *did* ("Bought" /
+    "Short-sold"), unlike a thesis's proposed action ("Buy" / "Short-sell").
+    """
+    if direction == "long":
+        return "Bought"
+    if direction == "short":
+        return "Short-sold"
+    return "—"
+
+
 # --- post-mortems (weekly reviews) ------------------------------------------
 
 

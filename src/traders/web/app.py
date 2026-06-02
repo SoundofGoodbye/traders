@@ -59,6 +59,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     templates.env.globals["strip_tag"] = explain.strip_tag
     templates.env.globals["thesis_headline"] = explain.thesis_headline
     templates.env.globals["describe_conviction"] = explain.describe_conviction
+    templates.env.globals["describe_position"] = explain.describe_position
     templates.env.globals["describe_schedule"] = explain.describe_schedule
     templates.env.globals["describe_job_status"] = explain.describe_job_status
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)

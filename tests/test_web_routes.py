@@ -53,6 +53,16 @@ def test_positions_route_ok(tmp_path):
     assert "AAA" in resp.text
 
 
+def test_positions_route_plain_english(tmp_path):
+    db_path = tmp_path / "t.db"
+    _seed(db_path, tmp_path)  # record_fill opens a long position on AAA
+    client = TestClient(create_app(db_path))
+    text = client.get("/positions").text
+    assert "How to read this page" in text  # the explainer box
+    assert "Bought" in text  # long -> past-tense plain word
+    assert "on paper" in text  # the unrealized P&L framing
+
+
 def test_routes_ok_on_empty_db(tmp_path):
     db_path = tmp_path / "empty.db"
     client = TestClient(create_app(db_path))

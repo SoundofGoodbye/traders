@@ -7,6 +7,7 @@ hermetic suite without the `web` extra.
 from traders.web.explain import (
     describe_conviction,
     describe_job_status,
+    describe_position,
     describe_schedule,
     explain_post_mortem,
     explain_thesis,
@@ -187,6 +188,13 @@ def test_describe_conviction_maps_score_to_word():
     assert describe_conviction(3) == "medium"
     assert describe_conviction(1) == "very low"
     assert describe_conviction(0) == "—"  # out of range -> no claim
+
+
+def test_describe_position_uses_past_tense():
+    # A position already exists, so it reads as what you did, not an instruction.
+    assert describe_position("long") == "Bought"
+    assert describe_position("short") == "Short-sold"
+    assert describe_position(None) == "—"
 
 
 # --- post-mortems (reviews) -------------------------------------------------
