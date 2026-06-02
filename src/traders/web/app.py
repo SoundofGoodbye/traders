@@ -53,8 +53,14 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     startup.close()
 
     templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
-    # Display helper: drop the `[signal]`/`[llm]` source tag from rationale text.
+    # Plain-English display helpers (pure functions from `explain`), exposed to
+    # templates the same way `strip_tag` is — so the list/jobs pages can label
+    # raw columns without the routes building parallel view dicts.
     templates.env.globals["strip_tag"] = explain.strip_tag
+    templates.env.globals["thesis_headline"] = explain.thesis_headline
+    templates.env.globals["describe_conviction"] = explain.describe_conviction
+    templates.env.globals["describe_schedule"] = explain.describe_schedule
+    templates.env.globals["describe_job_status"] = explain.describe_job_status
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)
     # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
     # otherwise a fresh per-process secret is fine for a single-user tool.
@@ -216,10 +222,15 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
 
     @app.get("/reviews", response_class=HTMLResponse)
     def reviews(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> Any:
+        post_mortems = queries.list_post_mortems(conn)
         return templates.TemplateResponse(
             request=request,
             name="reviews.html",
-            context={"post_mortems": queries.list_post_mortems(conn)},
+            context={
+                "reviews": [
+                    {"pm": pm, "ex": explain.explain_post_mortem(pm)} for pm in post_mortems
+                ],
+            },
         )
 
     @app.get("/jobs", response_class=HTMLResponse)

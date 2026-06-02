@@ -26,7 +26,10 @@ def test_jobs_page_lists_jobs(tmp_path):
     assert resp.status_code == 200
     assert "Daily run" in resp.text
     assert "Weekly review" in resp.text
-    assert "0 8 * * 1-5" in resp.text  # the schedule is shown
+    assert "0 8 * * 1-5" in resp.text  # the raw schedule is still shown for reference
+    # ...alongside its plain-English cadence
+    assert "Every weekday at 08:00" in resp.text
+    assert "Every Saturday at 09:00" in resp.text
 
 
 def test_toggle_disables_then_enables(tmp_path):

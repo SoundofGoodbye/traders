@@ -125,6 +125,17 @@ def test_theses_route_ok(tmp_path):
     assert client.get("/theses", params={"ticker": "AAA"}).status_code == 200
 
 
+def test_theses_list_shows_plain_english_labels(tmp_path):
+    db_path = tmp_path / "t.db"
+    _seed_path(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    text = client.get("/theses").text
+    # AAA hashes to a mean-reversion long in the stub generator (conviction 3),
+    # so the row carries the plain headline and the conviction word.
+    assert "Buy AAA expecting a bounce back up" in text
+    assert "medium" in text  # conviction 3 -> "medium"
+
+
 def test_thesis_detail_route_ok_and_404(tmp_path):
     db_path = tmp_path / "t.db"
     thesis_id = _seed_path(db_path, tmp_path)
@@ -183,3 +194,13 @@ def test_reviews_route_ok(tmp_path):
     resp = client.get("/reviews")
     assert resp.status_code == 200
     assert "AAA" in resp.text
+
+
+def test_reviews_route_explains_the_trade(tmp_path):
+    db_path = tmp_path / "t.db"
+    _seed_path(db_path, tmp_path)  # AAA bought at 100, sold at 120 -> +20% gain
+    client = TestClient(create_app(db_path))
+    text = client.get("/reviews").text
+    assert "What happened" in text
+    assert "Bought at 100.00, sold at 120.00" in text
+    assert "+20.0% gain" in text

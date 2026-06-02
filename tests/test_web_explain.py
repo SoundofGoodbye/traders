@@ -5,11 +5,16 @@ hermetic suite without the `web` extra.
 """
 
 from traders.web.explain import (
+    describe_conviction,
+    describe_job_status,
+    describe_schedule,
+    explain_post_mortem,
     explain_thesis,
     parse_research_note,
     strip_tag,
+    thesis_headline,
 )
-from traders.web.queries import Thesis
+from traders.web.queries import PostMortem, Thesis
 
 
 def _thesis(
@@ -158,6 +163,111 @@ def test_llm_thesis_uses_generic_strategy_and_verbatim_exit():
 def test_missing_exit_is_handled():
     ex = explain_thesis(_thesis(exit_condition=None))
     assert "re-evaluate" in ex.sell_when.lower()
+
+
+# --- thesis-list labels -----------------------------------------------------
+
+
+def test_thesis_headline_per_type_and_direction():
+    assert thesis_headline(_thesis(thesis_type="momentum")) == "Buy AAA to ride its uptrend"
+    assert (
+        thesis_headline(_thesis(thesis_type="mean-reversion"))
+        == "Buy AAA expecting a bounce back up"
+    )
+    assert thesis_headline(_thesis(thesis_type="value")) == "Buy AAA while it still looks cheap"
+    # Direction flips the verb; an unknown type degrades to a bare action.
+    assert thesis_headline(_thesis(thesis_type="momentum", direction="short")).startswith(
+        "Short-sell AAA"
+    )
+    assert thesis_headline(_thesis(thesis_type="catalyst")) == "Buy AAA"
+
+
+def test_describe_conviction_maps_score_to_word():
+    assert describe_conviction(5) == "very high"
+    assert describe_conviction(3) == "medium"
+    assert describe_conviction(1) == "very low"
+    assert describe_conviction(0) == "—"  # out of range -> no claim
+
+
+# --- post-mortems (reviews) -------------------------------------------------
+
+
+def _post_mortem(
+    *,
+    direction="long",
+    thesis_type="momentum",
+    entry_price=100.0,
+    exit_price=120.0,
+    opened_at="2026-05-01T00:00:00+00:00",
+    closed_at="2026-05-15T00:00:00+00:00",
+    outcome="[stub] AAA long: +20.00% (win).",
+    lessons="[stub] momentum thesis closed as win.",
+) -> PostMortem:
+    return PostMortem(
+        id=1,
+        reviewer_run_id=1,
+        position_id=1,
+        ticker="AAA",
+        direction=direction,
+        thesis_type=thesis_type,
+        entry_price=entry_price,
+        exit_price=exit_price,
+        size_pct=2.0,
+        opened_at=opened_at,
+        closed_at=closed_at,
+        outcome=outcome,
+        lessons=lessons,
+        created_at="2026-05-16T00:00:00+00:00",
+    )
+
+
+def test_post_mortem_long_win_reads_plainly():
+    ex = explain_post_mortem(_post_mortem())
+    assert ex.result == "gain"
+    assert ex.summary == (
+        "A trend-following buy on AAA. Bought at 100.00, sold at 120.00 — "
+        "a +20.0% gain over 14 days."
+    )
+    # Reviewer's own lines are kept but the machine source tag is stripped.
+    assert ex.outcome.startswith("AAA long") and "[stub]" not in ex.outcome
+    assert "[stub]" not in ex.lessons
+
+
+def test_post_mortem_short_loss_uses_cover_language():
+    # short entry 100 -> exit 120 is a loss; the trade verbs flip to short/cover.
+    ex = explain_post_mortem(_post_mortem(direction="short"))
+    assert ex.result == "loss"
+    assert "Short-sold at 100.00, covered at 120.00" in ex.summary
+    assert "-20.0% loss" in ex.summary
+
+
+def test_post_mortem_missing_price_is_honest():
+    ex = explain_post_mortem(_post_mortem(exit_price=None))
+    assert ex.result == "unknown"
+    assert "isn't clear" in ex.summary
+
+
+# --- scheduled jobs ---------------------------------------------------------
+
+
+def test_describe_schedule_known_crons():
+    assert describe_schedule("0 8 * * 1-5") == "Every weekday at 08:00"
+    assert describe_schedule("0 9 * * 6") == "Every Saturday at 09:00"
+    assert describe_schedule("30 6 * * *") == "Every day at 06:30"
+
+
+def test_describe_schedule_falls_back_to_raw_when_unsure():
+    # A day-of-month constraint isn't something we translate -> show it verbatim.
+    assert describe_schedule("0 8 1 * *") == "0 8 1 * *"
+    assert describe_schedule("not a cron") == "not a cron"
+    assert describe_schedule(None) == "—"
+
+
+def test_describe_job_status_words():
+    assert describe_job_status("ok") == "succeeded"
+    assert describe_job_status("error") == "failed"
+    assert describe_job_status(None) == "—"
+    assert describe_job_status("weird") == "weird"  # unknown marker shown as-is
 
 
 # --- research notes ---------------------------------------------------------

@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import date
 
-from traders.web.queries import Thesis
+from traders.post_mortems import compute_pnl_pct
+from traders.web.queries import PostMortem, Thesis
 
 # --- thesis explanation -----------------------------------------------------
 
@@ -260,6 +262,171 @@ def explain_thesis(thesis: Thesis) -> ThesisExplanation:
         earnings_warning=_earnings_warning(thesis.rationale),
         glossary=_glossary_for(combined),
     )
+
+
+# --- thesis-list labels -----------------------------------------------------
+# Short, scannable labels for the theses table, where a full paragraph would
+# be too much. They translate the raw enum/number columns into plain words.
+
+_CONVICTION_WORDS = {5: "very high", 4: "high", 3: "medium", 2: "low", 1: "very low"}
+
+# (verb, what the bet is) keyed by thesis_type then direction.
+_HEADLINE_TAILS: dict[str, dict[str, str]] = {
+    "momentum": {"long": "to ride its uptrend", "short": "expecting the slide to continue"},
+    "mean-reversion": {"long": "expecting a bounce back up", "short": "expecting it to fall back"},
+    "value": {"long": "while it still looks cheap", "short": ""},
+}
+
+_TYPE_NAMES = {
+    "momentum": "trend-following",
+    "mean-reversion": "bounce-back",
+    "value": "cheap-stock",
+}
+
+
+def describe_conviction(conviction: int) -> str:
+    """A plain word for the 1–5 conviction score (how strong the signal was)."""
+    return _CONVICTION_WORDS.get(int(conviction), "—")
+
+
+def describe_thesis_type(thesis_type: str) -> str:
+    """A short, friendly name for a strategy family."""
+    return _TYPE_NAMES.get(thesis_type, thesis_type or "discretionary")
+
+
+def _verb(direction: str) -> str:
+    if direction == "long":
+        return "Buy"
+    if direction == "short":
+        return "Short-sell"
+    return "Trade"
+
+
+def thesis_headline(thesis: Thesis) -> str:
+    """One short line a beginner can scan: the action and the bet behind it."""
+    tail = _HEADLINE_TAILS.get(thesis.thesis_type, {}).get(thesis.direction, "")
+    return f"{_verb(thesis.direction)} {thesis.ticker} {tail}".strip()
+
+
+# --- post-mortems (weekly reviews) ------------------------------------------
+
+
+@dataclass(frozen=True)
+class PostMortemExplanation:
+    """A closed trade re-told for a beginner: what was done and how it went."""
+
+    summary: str
+    result: str  # "gain" | "loss" | "flat" | "unknown" — also drives styling
+    pnl_pct: float | None
+    outcome: str  # the reviewer's own outcome line, source tag stripped
+    lessons: str  # the reviewer's own lessons line, source tag stripped
+
+
+def _held_phrase(opened_at: str | None, closed_at: str | None) -> str:
+    """`" over N days"` between two stored ISO timestamps, or `""` if unknown."""
+    try:
+        days = (date.fromisoformat(closed_at[:10]) - date.fromisoformat(opened_at[:10])).days
+    except (TypeError, ValueError):
+        return ""
+    if days <= 0:
+        return ""
+    return f" over {days} day{'s' if days != 1 else ''}"
+
+
+_TRADE_NOUNS = {"long": "buy", "short": "short-sell"}
+
+
+def explain_post_mortem(pm: PostMortem) -> PostMortemExplanation:
+    """Translate a weekly post-mortem into a one-line plain-English account."""
+    noun = _TRADE_NOUNS.get(pm.direction, "trade")
+    opener = f"A {describe_thesis_type(pm.thesis_type)} {noun} on {pm.ticker}."
+    pnl = compute_pnl_pct(pm.direction, pm.entry_price, pm.exit_price)
+    if pnl is None:
+        summary = f"{opener} The result isn't clear because a price is missing."
+        return PostMortemExplanation(
+            summary=summary,
+            result="unknown",
+            pnl_pct=None,
+            outcome=strip_tag(pm.outcome),
+            lessons=strip_tag(pm.lessons),
+        )
+    result = "gain" if pnl > 0 else "loss" if pnl < 0 else "flat"
+    if pm.direction == "short":
+        trade = f"Short-sold at {pm.entry_price:.2f}, covered at {pm.exit_price:.2f}"
+    else:
+        trade = f"Bought at {pm.entry_price:.2f}, sold at {pm.exit_price:.2f}"
+    held = _held_phrase(pm.opened_at, pm.closed_at)
+    return PostMortemExplanation(
+        summary=f"{opener} {trade} — a {pnl:+.1f}% {result}{held}.",
+        result=result,
+        pnl_pct=pnl,
+        outcome=strip_tag(pm.outcome),
+        lessons=strip_tag(pm.lessons),
+    )
+
+
+# --- scheduled jobs ---------------------------------------------------------
+
+_DOW_NAMES = {
+    "0": "Sunday",
+    "7": "Sunday",
+    "1": "Monday",
+    "2": "Tuesday",
+    "3": "Wednesday",
+    "4": "Thursday",
+    "5": "Friday",
+    "6": "Saturday",
+}
+
+_JOB_STATUS_WORDS = {
+    "ok": "succeeded",
+    "error": "failed",
+    "warn": "finished with warnings",
+    "skip": "skipped (job is off)",
+    "running": "running…",
+}
+
+
+def _dow_phrase(dow: str) -> str | None:
+    """Plain cadence for a cron day-of-week field, or None if not recognised."""
+    if dow == "*":
+        return "Every day"
+    if dow == "1-5":
+        return "Every weekday"
+    if dow in ("0,6", "6,0", "0,7", "6,7"):
+        return "Every weekend"
+    if dow in _DOW_NAMES:
+        return f"Every {_DOW_NAMES[dow]}"
+    return None
+
+
+def describe_schedule(expr: str | None) -> str:
+    """Turn a 5-field cron expression into a plain-English cadence.
+
+    Falls back to the raw expression for anything it can't confidently read,
+    so an unusual schedule is shown honestly rather than mis-described.
+    """
+    if not expr:
+        return "—"
+    parts = expr.split()
+    if len(parts) != 5:
+        return expr
+    minute, hour, dom, month, dow = parts
+    try:
+        time_str = f"{int(hour):02d}:{int(minute):02d}"
+    except ValueError:
+        return expr
+    phrase = _dow_phrase(dow)
+    if phrase is None or dom != "*" or month != "*":
+        return expr
+    return f"{phrase} at {time_str}"
+
+
+def describe_job_status(status: str | None) -> str:
+    """A friendly word for a cron-log status marker (`ok`/`error`/…)."""
+    if not status:
+        return "—"
+    return _JOB_STATUS_WORDS.get(status, status)
 
 
 # --- research notes ---------------------------------------------------------

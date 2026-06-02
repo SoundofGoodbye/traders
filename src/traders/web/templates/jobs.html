@@ -16,10 +16,13 @@
             <div class="ticker">{{ j.label }}</div>
             <div class="meta">{{ j.description }}</div>
           </td>
-          <td><code>{{ j.schedule }}</code></td>
+          <td>
+            {{ describe_schedule(j.schedule) }}
+            <div class="meta"><code>{{ j.schedule }}</code></div>
+          </td>
           <td class="meta">
             {% if j.last_run %}
-              {{ j.last_run }} <span class="tag">{{ j.last_status or "?" }}</span>
+              {{ j.last_run }} — {{ describe_job_status(j.last_status) }}
             {% else %}
               <span class="empty">never run</span>
             {% endif %}
