@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–33 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slice 33 (from the persona-review [backlog](backlog.md), item B1) adds period-by-period fundamentals ingestion. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–34 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–34 (from the persona-review [backlog](backlog.md): items B1, B2) add period-by-period fundamentals ingestion and a Piotroski quality score over them. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -228,6 +228,31 @@ where a price is needed). `traders ingest-fundamental-periods`. Append-only
 migration; no new dependency (reuses `realdata`). The consuming quality/value
 signals are the next slices (B2/B4); this slice only ingests, stores, and exposes
 the look-ahead-safe series.
+
+## Slice 34 — Piotroski F-score quality screen
+
+[Backlog](backlog.md) item **B2** and the first consumer of the slice-33 series:
+a deterministic, look-ahead-safe **quality score** that the value path will gate
+on (B4), so a "cheap" name must also be improving and financially sound rather
+than a value trap — the persona review's sharpest criticism. Mirrors the
+slice-18-before-20 shape: pure computation now, wiring next.
+
+`traders.quality` computes Piotroski's nine binary tests over a ticker's current
+vs prior **annual** period — profitability (ROA positive, operating cash flow
+positive, ROA improving, accruals: CFO > net income), leverage/liquidity
+(long-term-debt-to-assets falling, current ratio rising, no share dilution), and
+operating efficiency (gross margin rising, asset turnover rising). Each test
+returns `None` when its inputs are missing, so a sparse statement yields a
+*partial* score with a known denominator (`PiotroskiScore.score` /
+`.computable`) instead of a silently wrong 0-of-9 — a consumer can demand both a
+minimum score and a minimum number of computable tests. `piotroski_for(conn,
+ticker, as_of=...)` pulls the two most recent annual periods *available as of* the
+decision date via `fundamental_periods.latest_periods`, inheriting the slice-33
+look-ahead gate (a historical rebalance can't use a statement filed later);
+quarterly rows are ignored. Pure stdlib, no migration, no new dependency; fully
+hermetic. **Next (B4):** gate the `SignalThesisGenerator` value thesis on the
+score (cheap *and* quality-pass), and fold it into conviction. ROIC/ROE trend and
+interest coverage (the rest of B2) can extend `quality` on the same pattern.
 
 ## Future
 
