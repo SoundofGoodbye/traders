@@ -956,6 +956,34 @@ def test_cli_ingest_fundamental_periods_without_realdata_exits_cleanly(tmp_path)
     assert "realdata" in str(exc.value)
 
 
+# ---- buylist (slice 37) --------------------------------------------------
+
+
+def test_cli_buylist_set_and_status(tmp_path, capsys):
+    from traders.prices import save_prices
+
+    db = tmp_path / "t.db"
+    main(["buylist", "--db", str(db), "set", "--ticker", "AAA", "--target", "100"])
+    assert "set AAA" in capsys.readouterr().out
+    # Seed a price at/under the target so status reports it triggered.
+    conn = sqlite3.connect(db)
+    save_prices(conn, "AAA", [("2026-01-02", 95.0)])
+    conn.close()
+    main(["buylist", "--db", str(db), "status"])
+    out = capsys.readouterr().out
+    assert "AAA" in out and "TRIGGERED" in out
+
+
+def test_cli_buylist_remove(tmp_path, capsys):
+    db = tmp_path / "t.db"
+    main(["buylist", "--db", str(db), "set", "--ticker", "AAA", "--target", "100"])
+    capsys.readouterr()
+    main(["buylist", "--db", str(db), "remove", "--ticker", "AAA"])
+    assert "removed AAA" in capsys.readouterr().out
+    main(["buylist", "--db", str(db), "status"])
+    assert "empty" in capsys.readouterr().out
+
+
 # ---- analyse --generator llm (slice 27) ----------------------------------
 
 

@@ -153,6 +153,10 @@ uv run traders metrics
 uv run traders backtest --source db --strategy signals --oos-fraction 0.3
 uv run traders run-weekly --generator llm
 
+# buy-list — wait for your price instead of reacting to the daily list
+uv run traders buylist set --ticker AAPL --target 150
+uv run traders buylist status            # which targets are TRIGGERED at the latest close
+
 # jobs
 uv run traders jobs status
 uv run traders jobs disable daily        # or enable

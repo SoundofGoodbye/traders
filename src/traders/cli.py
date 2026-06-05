@@ -349,6 +349,17 @@ def main(argv: list[str] | None = None) -> None:
     jobs_check = jobs_sub.add_parser("check", help="Exit 0 if the job is enabled, 1 if disabled")
     jobs_check.add_argument("name")
 
+    buylist_p = sub.add_parser("buylist", help="Manage your buy-list (names to own at your price)")
+    buylist_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    buylist_sub = buylist_p.add_subparsers(dest="buylist_action", required=True)
+    bl_set = buylist_sub.add_parser("set", help="Add or update a target buy-below price")
+    bl_set.add_argument("--ticker", required=True)
+    bl_set.add_argument("--target", type=float, required=True, help="Buy at/under this price")
+    bl_set.add_argument("--note", default=None, help="Optional reminder of why")
+    bl_remove = buylist_sub.add_parser("remove", help="Remove a ticker from the buy-list")
+    bl_remove.add_argument("--ticker", required=True)
+    buylist_sub.add_parser("status", help="Show targets vs the latest price (which are triggered)")
+
     metrics_p = sub.add_parser("metrics", help="Score realized results against the strategy goal")
     metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     metrics_p.add_argument(
@@ -908,6 +919,56 @@ def main(argv: list[str] | None = None) -> None:
             state = "on " if s.enabled else "off"
             last = f"{s.last_run} [{s.last_status}]" if s.last_run else "never run"
             print(f"  [{state}] {s.name:7} {s.schedule:12}  last: {last}")
+        return
+
+    if args.cmd == "buylist":
+        from traders import buylist
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        if args.buylist_action == "set":
+            try:
+                t = buylist.set_target(conn, args.ticker, args.target, note=args.note)
+            except ValueError as e:
+                conn.close()
+                raise SystemExit(f"buylist error: {e}") from e
+            print(f"set {t.ticker}: buy at/under {t.target_price:.2f}")
+            conn.close()
+            return
+        if args.buylist_action == "remove":
+            removed = buylist.remove_target(conn, args.ticker)
+            print(f"removed {args.ticker}" if removed else f"{args.ticker} was not on the buy-list")
+            conn.close()
+            return
+        # status — targets vs the latest price, plus the model's suggested buy-below
+        from datetime import date
+
+        from traders.prices import load_history_from_db
+        from traders.valuation import valuations_asof
+
+        history = load_history_from_db(conn)
+        valuation = valuations_asof(conn, history, as_of=date.today())
+        rows = buylist.evaluate(conn, history=history, valuation=valuation)
+        if not rows:
+            print("buy-list is empty — add one: traders buylist set --ticker AAPL --target 150")
+        for r in rows:
+            price = f"{r.latest_price:.2f}" if r.latest_price is not None else "—"
+            if r.triggered:
+                flag = "TRIGGERED — at/under your price"
+            elif r.distance_pct is not None:
+                flag = f"{r.distance_pct:+.1f}% vs target"
+            else:
+                flag = "no price yet"
+            suggested = (
+                f"; model buy-below ~{r.suggested_buy_below:.2f}"
+                if r.suggested_buy_below is not None
+                else ""
+            )
+            print(
+                f"  {r.target.ticker}: target {r.target.target_price:.2f}, "
+                f"now {price} [{flag}]{suggested}"
+            )
+        conn.close()
         return
 
     if args.cmd == "metrics":

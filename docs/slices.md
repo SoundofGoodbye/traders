@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–36 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–37 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slice 37 (item B5) adds a user buy-list with price triggers. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -317,6 +317,23 @@ today's price" sentence. `build_signal_generator` wires it automatically. No
 migration, no new dependency. **Deferred:** a true multi-stage DCF and a
 maintenance-vs-growth capex split — the v1 capitalization is intentionally simple
 and conservative.
+
+## Slice 37 — Buy-list (names to own at your price)
+
+[Backlog](backlog.md) item **B5** — the review's highest-leverage *behavioural*
+change: flip the workflow from reacting to a fresh daily candidate list (which
+nudges overtrading) to naming the businesses you'd own and the price you'd pay,
+then waiting for the market to come to you. `traders.buylist` + migration
+`009_buy_list.sql` add a user-curated `buy_list` table (one row per ticker — a
+target buy-below price and an optional note); **user data, never written by the
+agents**. `set_target` upserts (preserving `created_at`); `remove_target` /
+`load_targets` / `get_target` round it out. `evaluate` joins each target against
+the latest close — `triggered` when the price is at/under the target, plus the
+distance still to go — and, when a slice-36 valuation map is supplied, the model's
+own **suggested buy-below** as a sanity check against a self-chosen target.
+`traders buylist {set,remove,status}`. This slice is the data + CLI foundation;
+the `/buy-list` web page (the surface the beginner actually lives in) is the next
+slice. No migration beyond 009, no new dependency; hermetic tests.
 
 ## Future
 

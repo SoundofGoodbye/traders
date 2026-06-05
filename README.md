@@ -156,6 +156,25 @@ It composes the same decision logic the live agents use, so results don't diverg
 
 The same machinery backs the **apply gate** (slice 24): `traders optimize --apply ID` now replays the proposal in-sample vs out-of-sample and applies it only if the candidate beats the baseline out-of-sample *and* its per-trade Sharpe survives deflation for the number of proposals tried (so the optimizer can't fish across many tries). It defaults to real ingested prices and prints a gate report; `--force` restores the old unconditional apply after you've reviewed why it blocked.
 
+## Buy-list
+
+Name the businesses you'd own and the price you'd pay, then let the system tell you
+when the market comes to you — the discipline that replaces reacting to a daily
+candidate list. Stored in a `buy_list` table (user data, never written by the
+agents):
+
+```bash
+uv run traders buylist set --ticker AAPL --target 150 --note "fair price for a great business"
+uv run traders buylist status     # targets vs the latest close; which are TRIGGERED
+uv run traders buylist remove --ticker AAPL
+```
+
+`status` flags each name `TRIGGERED` when the latest close is at/under your target,
+shows how far it still has to fall otherwise, and — once `ingest-fundamental-periods`
+has run — prints the model's own suggested buy-below (the slice-36 intrinsic-value
+estimate) as a sanity check against your target. A `/buy-list` web page is on the
+roadmap.
+
 ## Current limitations
 
 - **Quality & PEAD signals deferred.** Value (E/P, B/P, FCF/P) and earnings-proximity are wired into the signal thesis generator (slice 26), but a full Piotroski quality score (needs year-over-year statements) and post-earnings drift / SUE (needs consensus estimates) need richer fundamentals than a single yfinance snapshot — both wait on period-by-period statement ingestion.
