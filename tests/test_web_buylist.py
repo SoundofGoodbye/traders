@@ -96,3 +96,21 @@ def test_triggered_target_shows_ready(tmp_path):
     assert "AAA" in resp.text
     assert "Ready" in resp.text
     assert "end-of-day" in resp.text  # B8: price caveat shown alongside the prices
+
+
+def test_set_rejects_invalid_ticker(tmp_path):
+    client = TestClient(create_app(tmp_path / "t.db"))
+    token = _csrf_token(client)
+    resp = client.post(
+        "/buy-list/set",
+        data={"csrf_token": token, "ticker": "not a ticker!", "target_price": "150"},
+    )
+    assert resp.status_code == 400
+
+
+def test_security_headers_present(tmp_path):
+    client = TestClient(create_app(tmp_path / "t.db"))
+    resp = client.get("/buy-list")
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert "content-security-policy" in resp.headers

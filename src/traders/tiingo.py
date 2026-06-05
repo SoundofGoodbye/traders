@@ -86,12 +86,17 @@ def _default_tiingo_fetcher(
         )
 
     def fetch(symbol: str) -> str:
-        params = {"format": "csv", "token": tok}
+        # Token rides in the Authorization header, not the query string (audit L2):
+        # query params land in proxy/server access logs; headers do not.
+        params: dict[str, str] = {"format": "csv"}
         if start_date:
             params["startDate"] = start_date
         base = _EOD_URL.format(symbol=urllib.parse.quote(symbol))
         url = f"{base}?{urllib.parse.urlencode(params)}"
-        req = urllib.request.Request(url, headers={"User-Agent": "traders-paper/1.0"})
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "traders-paper/1.0", "Authorization": f"Token {tok}"},
+        )
         with urllib.request.urlopen(req, timeout=15) as resp:
             return read_capped(resp).decode("utf-8", errors="replace")
 

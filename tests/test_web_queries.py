@@ -114,3 +114,9 @@ def test_parse_sources():
     assert queries.parse_sources('["a", "b"]') == ["a", "b"]
     # non-JSON falls back to a single-item list rather than raising
     assert queries.parse_sources("just a string") == ["just a string"]
+
+
+def test_parse_sources_drops_dangerous_schemes():
+    # Pre-emptive XSS hardening (audit L6): javascript:/data: never survive.
+    assert queries.parse_sources('["https://x.test", "javascript:alert(1)"]') == ["https://x.test"]
+    assert queries.parse_sources('["data:text/html,<script>"]') == []

@@ -15,6 +15,7 @@ must live here rather than inside the factory.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import date
@@ -35,6 +36,10 @@ from traders.web import csrf, explain, queries
 from traders.web.prices import PriceFn
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Buy-list tickers are user free-text; constrain to a real ticker shape (audit L7)
+# before they are stored and later handed to the price lookup.
+_VALID_TICKER = re.compile(r"^[A-Z0-9.^=-]{1,12}$")
 
 
 def _open_position_view(
@@ -79,6 +84,23 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     templates.env.globals["describe_job_status"] = explain.describe_job_status
     templates.env.globals["price_caveat"] = explain.PRICE_CAVEAT
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)
+
+    @app.middleware("http")
+    async def _security_headers(request: Request, call_next: Callable[..., Any]) -> Any:
+        # Defense-in-depth headers (audit L5) — cheap insurance if the app is ever
+        # bound beyond 127.0.0.1. CSP allows inline styles (templates use a <style>
+        # block + style="" attributes) but no inline scripts (there are none).
+        response = await call_next(request)
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "script-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+        )
+        return response
+
     # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
     # otherwise a fresh per-process secret is fine for a single-user tool.
     secret = os.environ.get("TRADERS_WEB_SECRET") or csrf.new_secret()
@@ -333,9 +355,9 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     async def post_buylist_set(request: Request) -> Any:
         await check_csrf(request)
         form = await request.form()
-        ticker = str(form.get("ticker") or "").strip()
-        if not ticker:
-            raise HTTPException(status_code=400, detail="missing ticker")
+        ticker = str(form.get("ticker") or "").strip().upper()
+        if not _VALID_TICKER.match(ticker):
+            raise HTTPException(status_code=400, detail="invalid ticker")
         target = form_float(form.get("target_price"), "target_price")
         note = form.get("note") or None
         conn = connect(db_path)

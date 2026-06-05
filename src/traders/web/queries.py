@@ -9,8 +9,20 @@ The UI never writes through here — write actions go through
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
+
+# URL schemes that are dangerous if a source string is ever rendered into an href
+# (audit L6). Sources display as text today, but neutralize at the boundary so a
+# future template change can't turn a stored `javascript:` URL into XSS.
+_UNSAFE_SCHEME = re.compile(r"^\s*(?:javascript|data|vbscript):", re.IGNORECASE)
+
+
+def _safe_source(value: object) -> str:
+    text = str(value)
+    return "" if _UNSAFE_SCHEME.match(text) else text
+
 
 _THESIS_COLS = (
     "id, ticker, thesis_type, direction, conviction, suggested_size_pct,"
@@ -165,10 +177,9 @@ def parse_sources(raw: str | None) -> list[str]:
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        return [raw]
-    if isinstance(data, list):
-        return [str(x) for x in data]
-    return [str(data)]
+        return [s for s in (_safe_source(raw),) if s]
+    items = data if isinstance(data, list) else [data]
+    return [s for s in (_safe_source(x) for x in items) if s]
 
 
 # --- candidates -------------------------------------------------------------
