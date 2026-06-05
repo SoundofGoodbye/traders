@@ -99,9 +99,10 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 - **Proposal:** inline caveat badges ("from a current snapshot, not audited history"; "US end-of-day prices"). Cheap, high-trust.
 - **Shipped:** slice 39 — `ThesisExplanation.caveat` (value "cheap" ratios are a current snapshot → shown on Today + thesis detail) and a shared `explain.PRICE_CAVEAT` (end-of-day / US-only) on Positions + Buy-list, with subtle `.caveat` styling.
 
-### B9 — Reframe **Today** to dampen the daily-action reflex  · P1 · S/M
+### B9 — Reframe **Today** to dampen the daily-action reflex  · P1 · S/M  · ✅ shipped (slice 40)
 - **Problem:** Today reads as a daily buy-list with "ride the uptrend" nudges to a beginner — manufactures overtrading.
 - **Proposal:** lead with "no action unless it meets your plan"; split "for your homework" from "act now"; lower the urgency while keeping plain English.
+- **Shipped:** slice 40 — "How to use this page" box (ideas to research, not orders; most days do nothing; wait via the Buy-list); "PM picks" → "Ideas to research"; "Rejected" → "Set aside"; softened CTA; Candidates intro. Template/copy only.
 
 ### B10 — Conviction that means something  · P1 · S
 - **Problem:** conviction is mechanical (e.g. momentum ≥25% → 5). It implies judgment it doesn't have.
@@ -149,11 +150,14 @@ the plain-English layer explaining it. The review's sharpest criticism is closed
 end-to-end.
 
 **Next — pick the thread:**
-- **B8/B9 (recommended) — the honesty-gap UI.** Cheap, high-trust, beginner-facing:
-  surface the snapshot/US-EOD caveats at the point of claim (B8), and reframe the
-  Today page to dampen the daily-action reflex now that the buy-list offers the
-  patient alternative (B9). Pairs naturally with the buy-list just shipped.
-- **B6 — thesis-intact monitoring** (business-level, not just price/stop) on the
-  slice-33 series.
-- **B2 remainder** — ROIC/ROE trend, interest coverage, debt-maturity on the
-  slice-34 `quality` module.
+- **B6 (recommended) — thesis-intact monitoring.** Check whether the *reason* to
+  own still holds (earnings still growing, margin not collapsing, no debt event) at
+  the business level, not just price vs stop — reads the slice-33 series already in
+  place. The review's "is the thesis still intact?" point.
+- **B10 — conviction that means something.** Fold quality/margin-of-safety into the
+  momentum/mean-reversion convictions too (value already does), or relabel the raw
+  signal-magnitude ones honestly.
+- **B2 remainder** — ROIC/ROE trend, interest coverage on the slice-34 `quality`
+  module.
+- **B11–B15** — data breadth (EU universe, filing content, real fundamentals
+  provider) and portfolio-level views (exposure, capital allocation).

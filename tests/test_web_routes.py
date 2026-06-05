@@ -44,6 +44,18 @@ def test_today_route_ok(tmp_path):
     assert "AAA" in resp.text
 
 
+def test_today_route_reframed_low_pressure(tmp_path):
+    # B9: the page frames picks as ideas to research, not a daily to-do list.
+    db_path = tmp_path / "t.db"
+    _seed(db_path, tmp_path)
+    client = TestClient(create_app(db_path))
+    text = client.get("/").text
+    assert "ideas to research" in text.lower()
+    assert "do nothing" in text  # most days, the right move
+    assert "Buy-list" in text  # points at the patient alternative
+    assert "how to record a buy" not in text  # the old action nudge is gone
+
+
 def test_positions_route_ok(tmp_path):
     db_path = tmp_path / "t.db"
     _seed(db_path, tmp_path)

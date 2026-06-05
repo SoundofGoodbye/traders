@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–39 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slice 39 (item B8) surfaces honest data caveats at the point of claim. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–40 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -363,6 +363,20 @@ end-of-day and US-only on the free tier — shown on Positions (when prices are 
 and the Buy-list. Subtle `.caveat` styling (muted, info-toned ⓘ — distinct from the
 red ⚠ earnings warning) keeps it honest without alarming. Pure-function + template
 change; no migration, no new dependency.
+
+## Slice 40 — Reframe the Today page (dampen the daily-action reflex)
+
+[Backlog](backlog.md) item **B9** — the Today page nudged a beginner toward daily
+action ("PM picks", "Full breakdown & how to record a buy →"), manufacturing the
+overtrading the review warned against. It now leads with a "How to use this page"
+box — *these are ideas to research, not orders; most days the right move is to do
+nothing* — and points at the Buy-list to **wait for your price**. "PM picks"
+becomes "Ideas to research"; the run line reads "N idea(s) worth a look, M set
+aside"; the per-card CTA softens to "See the full breakdown →" (the "record a buy"
+nudge is gone); "Rejected" becomes "Set aside" (the discipline of *not* acting,
+made visible); and the Candidates table gains a "background, not recommendations"
+intro. Template/copy only — no data, route, or schema change; pairs with the
+slice-37/38 buy-list it now points to.
 
 ## Future
 

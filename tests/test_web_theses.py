@@ -164,7 +164,7 @@ def test_today_route_explains_accepted_picks(tmp_path):
     client = TestClient(create_app(db_path))
     text = client.get("/").text
     # an accepted pick carries the plain-English explainer and links into detail
-    assert "Full breakdown" in text
+    assert "full breakdown" in text  # B9: softened CTA ("See the full breakdown →")
     assert 'href="/theses/' in text
 
 

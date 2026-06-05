@@ -3,12 +3,21 @@
 {% block title %}Today — traders{% endblock %}
 {% block content %}
   <h1>Today</h1>
+  <div class="explain">
+    <p class="explain-label">How to use this page</p>
+    <p class="lead">These are <b>ideas to research — not orders</b>, and not a to-do list. Most
+      days the right move is to do nothing; acting only when an idea fits your own plan
+      <i>and</i> your price is how this beats overtrading.</p>
+    <p class="sell">Want to wait for a specific price instead? Add the name to your
+      <a class="link" href="/buy-list">Buy-list</a> and let the market come to you.</p>
+  </div>
   {% if pm_run_id is none %}
     <p class="sub empty">No daily report yet. Run <code>traders run-daily</code> to generate one.</p>
   {% else %}
-    <p class="sub">Latest PM run #{{ pm_run_id }} — {{ accepted|length }} accepted, {{ rejected|length }} rejected.</p>
+    <p class="sub">From today's run #{{ pm_run_id }} — {{ accepted|length }} idea(s) worth a look,
+      {{ rejected|length }} set aside.</p>
 
-    <h2>PM picks</h2>
+    <h2>Ideas to research</h2>
     {% if accepted %}
       {% for pick in accepted %}
         {% set t = pick.thesis %}
@@ -18,7 +27,7 @@
             <span><a class="link ticker" href="/theses/{{ t.id }}">{{ t.ticker }}</a>
               <span class="tag {{ t.direction }}">{{ t.direction }}</span>
               <span class="tag">{{ t.thesis_type }}</span></span>
-            <span class="meta">conviction {{ t.conviction }} · size {{ "%.1f"|format(t.suggested_size_pct) }}%</span>
+            <span class="meta">conviction {{ t.conviction }} · suggested size {{ "%.1f"|format(t.suggested_size_pct) }}%</span>
           </div>
           <div class="explain">
             <p class="lead">{{ ex.strategy }}</p>
@@ -26,15 +35,16 @@
             {% if ex.earnings_warning %}<p class="warn">⚠ {{ ex.earnings_warning }}</p>{% endif %}
             {% if ex.caveat %}<p class="caveat">ⓘ {{ ex.caveat }}</p>{% endif %}
           </div>
-          <p class="meta"><a class="link" href="/theses/{{ t.id }}">Full breakdown &amp; how to record a buy →</a></p>
+          <p class="meta"><a class="link" href="/theses/{{ t.id }}">See the full breakdown →</a></p>
         </article>
       {% endfor %}
     {% else %}
-      <p class="empty">No theses accepted in this run.</p>
+      <p class="empty">No ideas surfaced in this run — that's fine; not every day has one.</p>
     {% endif %}
 
     {% if rejected %}
-      <h2>Rejected</h2>
+      <h2>Set aside</h2>
+      <p class="sub">Surfaced, then filtered out — shown so the discipline of <i>not</i> acting is visible too.</p>
       {% for pick in rejected %}
         {% set t = pick.thesis %}
         <article class="card">
@@ -44,13 +54,14 @@
               <span class="tag">{{ t.thesis_type }}</span></span>
             <span class="meta">conviction {{ t.conviction }}</span>
           </div>
-          {% if pick.reason %}<p class="meta">Why it didn't make the cut: {{ pick.reason }}</p>{% endif %}
+          {% if pick.reason %}<p class="meta">Why it was set aside: {{ pick.reason }}</p>{% endif %}
         </article>
       {% endfor %}
     {% endif %}
   {% endif %}
 
   <h2>Candidates</h2>
+  <p class="sub">Names the Scout flagged for a closer look — background it gathered evidence on, not recommendations.</p>
   {% if candidates %}
     <table>
       <thead><tr><th>Ticker</th><th>Reason</th></tr></thead>
