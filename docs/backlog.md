@@ -124,9 +124,10 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 - **Problem:** `research.render_content` surfaces filing/news **titles + snippets only**; EDGAR bodies go unread. The LLM thesis is only as good as this thin note.
 - **Proposal:** pull and extract key sections (risk factors, MD&A, segment data) or full-text snippets for the Analyst/LLM to use.
 
-### B13 — A fundamentals provider you'd stake money on  · P2 · M
+### B13 — A fundamentals provider you'd stake money on  · P2 · M  · ✅ shipped (slice 47)
 - **Problem:** yfinance is scraped/unofficial/fragile — fine for a hobby quote, not to underwrite a buy.
 - **Proposal:** evaluate a real provider (even paid) behind the same `DataSource` pattern; keep yfinance as the free default.
+- **Shipped:** slice 47 — SEC EDGAR `companyfacts` (official, audited, free, real filing dates): `traders.edgar_fundamentals.companyfacts_to_periods` + `ingest-fundamental-periods --source edgar`. The right answer — official filings beat scraped yfinance. yfinance stays the default.
 
 ---
 

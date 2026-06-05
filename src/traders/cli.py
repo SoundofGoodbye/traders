@@ -646,10 +646,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Ticker to ingest (repeatable; default: the whole watchlist)",
     )
     ingest_fp.add_argument(
+        "--source",
+        choices=("yfinance", "edgar"),
+        default="yfinance",
+        help="Statements source: 'yfinance' (default; needs the 'realdata' extra) or "
+        "'edgar' (official audited SEC companyfacts; needs TRADERS_EDGAR_UA)",
+    )
+    ingest_fp.add_argument(
         "--delay",
         type=float,
         default=1.0,
-        help="Seconds between requests (be polite to Yahoo; default: 1.0)",
+        help="Seconds between requests (be polite to the provider; default: 1.0)",
     )
 
     eval_p = sub.add_parser(
@@ -1231,8 +1238,19 @@ def main(argv: list[str] | None = None) -> None:
         conn = connect(args.db)
         apply_migrations(conn)
         tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
+        fetch_fn = None
+        if args.source == "edgar":
+            from traders.edgar_fundamentals import _default_edgar_facts_fetcher
+
+            try:
+                fetch_fn = _default_edgar_facts_fetcher()
+            except RuntimeError as e:
+                conn.close()
+                raise SystemExit(str(e)) from e
         try:
-            result = ingest_fundamental_periods(conn, tickers, delay_s=args.delay)
+            result = ingest_fundamental_periods(
+                conn, tickers, fetch_fn=fetch_fn, source=args.source, delay_s=args.delay
+            )
         except ImportError as e:
             conn.close()
             raise SystemExit(str(e)) from e
@@ -1240,7 +1258,7 @@ def main(argv: list[str] | None = None) -> None:
         skipped = result["skipped"]
         print(
             f"ingested {result['periods']} period(s) across {len(written)} ticker(s); "
-            f"{len(skipped)} skipped"
+            f"{len(skipped)} skipped (source: {args.source})"
         )
         for ticker in written:
             print(f"  {ticker}")

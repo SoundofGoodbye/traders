@@ -956,6 +956,71 @@ def test_cli_ingest_fundamental_periods_without_realdata_exits_cleanly(tmp_path)
     assert "realdata" in str(exc.value)
 
 
+def test_cli_ingest_fundamental_periods_edgar(tmp_path, capsys, monkeypatch):
+    # Patch the real EDGAR companyfacts fetcher with a canned one (hermetic).
+    import traders.edgar_fundamentals as ef
+
+    periods = [
+        {
+            "period_end": "2024-12-31",
+            "period_type": "annual",
+            "available_at": "2025-02-15",
+            "net_income": 100.0,
+            "total_assets": 2000.0,
+        },
+        {
+            "period_end": "2023-12-31",
+            "period_type": "annual",
+            "available_at": "2024-02-15",
+            "net_income": 90.0,
+            "total_assets": 1900.0,
+        },
+    ]
+    monkeypatch.setattr(ef, "_default_edgar_facts_fetcher", lambda: lambda ticker: periods)
+    db = tmp_path / "t.db"
+    main(
+        [
+            "ingest-fundamental-periods",
+            "--db",
+            str(db),
+            "--ticker",
+            "AAA",
+            "--source",
+            "edgar",
+            "--delay",
+            "0",
+        ]
+    )
+    assert "source: edgar" in capsys.readouterr().out
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM fundamental_periods WHERE source='edgar'").fetchone()[0]
+    conn.close()
+    assert n == 2
+
+
+def test_cli_ingest_fundamental_periods_edgar_without_ua_exits_cleanly(tmp_path, monkeypatch):
+    import traders.cli as cli
+
+    monkeypatch.setattr(cli, "load_dotenv", lambda *a, **k: None)  # don't let .env re-add the UA
+    monkeypatch.delenv("TRADERS_EDGAR_UA", raising=False)
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit) as exc:
+        main(
+            [
+                "ingest-fundamental-periods",
+                "--db",
+                str(db),
+                "--ticker",
+                "AAA",
+                "--source",
+                "edgar",
+                "--delay",
+                "0",
+            ]
+        )
+    assert "TRADERS_EDGAR_UA" in str(exc.value)
+
+
 # ---- buylist (slice 37) --------------------------------------------------
 
 

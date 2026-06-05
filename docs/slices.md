@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–46 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–47 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -449,6 +449,22 @@ daily returns ≥ a threshold) — the "you think you're diversified but these a
 same bet" risk a size table hides. `traders exposure [--min-corr]`. Sector exposure
 is deferred (needs per-ticker sector data the system doesn't ingest). Pure stdlib
 (`statistics.correlation`); no migration, no new dependency.
+
+## Slice 47 — EDGAR companyfacts fundamentals (a source you'd stake money on)
+
+[Backlog](backlog.md) item **B13** — yfinance is scraped and fragile; SEC EDGAR's
+`companyfacts` XBRL API is the official, audited source, free, and carries the
+*real filing date* per fact, so look-ahead safety becomes exact instead of a
+reporting-lag estimate. `traders.edgar_fundamentals.companyfacts_to_periods` maps
+companyfacts JSON onto the same normalized per-period dicts the slice-33 ingestion
+consumes (annual 10-K entries only — quarterly durations excluded; capex stored
+negative; latest-filed amendment wins), so it drops in as
+`ingest-fundamental-periods --source edgar` with no schema change. The mapper is
+pure and hermetic (tested against canned companyfacts); only the fetcher touches
+the network (ticker→CIK then companyfacts) and hard-requires `TRADERS_EDGAR_UA`,
+exiting cleanly without it. No migration, no new dependency (stdlib urllib+json).
+This also makes B12's "richer data" point real for *numbers*; filing **prose** is
+still future.
 
 ## Future
 
