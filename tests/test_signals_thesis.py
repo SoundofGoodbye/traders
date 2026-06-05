@@ -9,8 +9,10 @@ from pathlib import Path
 
 from traders import analyst, research, scout
 from traders.db import apply_migrations
+from traders.fundamental_periods import periods_from_statements, save_periods
 from traders.fundamentals import Fundamentals, save_fundamentals
 from traders.prices import PriceHistory, save_prices
+from traders.quality import PiotroskiScore
 from traders.signals_thesis import SignalThesisGenerator, build_signal_generator
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
@@ -194,3 +196,161 @@ def test_build_signal_generator_uses_ingested_fundamentals():
     drafts = build_signal_generator(conn, as_of=as_of).generate("AAA", "")
     assert len(drafts) == 1
     assert drafts[0].thesis_type == "value"
+
+
+# ---- value quality gate (slice 35 / B4) ----------------------------------
+
+
+def _annual(period_end: str, available_at: str, **figures) -> dict:
+    return {
+        "period_end": period_end,
+        "period_type": "annual",
+        "available_at": available_at,
+        **figures,
+    }
+
+
+# Two annual periods whose year-over-year improves on every Piotroski test -> 9/9.
+_HI_QUALITY = [
+    _annual(
+        "2024-12-31",
+        "2025-02-15",
+        revenue=1200.0,
+        gross_profit=420.0,
+        net_income=120.0,
+        operating_cash_flow=150.0,
+        total_assets=2100.0,
+        current_assets=800.0,
+        current_liabilities=400.0,
+        long_term_debt=300.0,
+        shares_outstanding=1000.0,
+    ),
+    _annual(
+        "2023-12-31",
+        "2024-02-15",
+        revenue=1000.0,
+        gross_profit=300.0,
+        net_income=50.0,
+        operating_cash_flow=60.0,
+        total_assets=2000.0,
+        current_assets=600.0,
+        current_liabilities=400.0,
+        long_term_debt=500.0,
+        shares_outstanding=1000.0,
+    ),
+]
+# Two annual periods that deteriorate on every test -> 0/9.
+_LO_QUALITY = [
+    _annual(
+        "2024-12-31",
+        "2025-02-15",
+        revenue=900.0,
+        gross_profit=270.0,
+        net_income=-10.0,
+        operating_cash_flow=-20.0,
+        total_assets=2200.0,
+        current_assets=440.0,
+        current_liabilities=400.0,
+        long_term_debt=600.0,
+        shares_outstanding=1200.0,
+    ),
+    _annual(
+        "2023-12-31",
+        "2024-02-15",
+        revenue=1000.0,
+        gross_profit=400.0,
+        net_income=100.0,
+        operating_cash_flow=120.0,
+        total_assets=2000.0,
+        current_assets=800.0,
+        current_liabilities=400.0,
+        long_term_debt=200.0,
+        shares_outstanding=1000.0,
+    ),
+]
+
+
+def test_cheap_low_quality_name_is_vetoed():
+    # Cheap on all three flags, but a confirmed weak F-score -> no thesis (trap).
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        quality={"AAA": PiotroskiScore(score=2, computable=9, components={})},
+    )
+    assert gen.generate("AAA", "") == []
+
+
+def test_cheap_strong_quality_boosts_conviction_and_notes_score():
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        quality={"AAA": PiotroskiScore(score=8, computable=9, components={})},
+    )
+    d = gen.generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert d.conviction == 5  # 3/3 flags (base 4) + strong quality -> +1
+    assert "Piotroski 8/9" in d.rationale
+
+
+def test_cheap_passing_quality_keeps_conviction():
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        quality={"AAA": PiotroskiScore(score=5, computable=9, components={})},
+    )
+    d = gen.generate("AAA", "")[0]
+    assert d.conviction == 4  # passes the gate but not strong -> unchanged
+    assert "Piotroski 5/9" in d.rationale
+
+
+def test_cheap_unknown_quality_falls_back_to_cheap_only():
+    # The quality map exists but has no entry for this name -> no veto, no note.
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        quality={"BBB": PiotroskiScore(score=1, computable=9, components={})},
+    )
+    d = gen.generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert d.conviction == 4
+    assert "Piotroski" not in d.rationale
+
+
+def test_cheap_sparse_quality_falls_back_not_vetoed():
+    # A low score with too few computable tests to trust -> fall back, don't veto.
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        quality={"AAA": PiotroskiScore(score=1, computable=3, components={})},
+    )
+    d = gen.generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert "Piotroski" not in d.rationale
+
+
+def test_build_signal_generator_vetoes_low_quality_value():
+    conn = _conn()
+    closes = [100.0] * 100
+    save_prices(conn, "AAA", list(_series(closes)))
+    save_fundamentals(conn, [_cheap("AAA")])
+    save_periods(conn, periods_from_statements("AAA", _LO_QUALITY))
+    as_of = START + timedelta(days=len(closes))
+    assert build_signal_generator(conn, as_of=as_of).generate("AAA", "") == []
+
+
+def test_build_signal_generator_passes_strong_quality_value():
+    conn = _conn()
+    closes = [100.0] * 100
+    save_prices(conn, "AAA", list(_series(closes)))
+    save_fundamentals(conn, [_cheap("AAA")])
+    save_periods(conn, periods_from_statements("AAA", _HI_QUALITY))
+    as_of = START + timedelta(days=len(closes))
+    d = build_signal_generator(conn, as_of=as_of).generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert d.conviction == 5
+    assert "Piotroski 9/9" in d.rationale

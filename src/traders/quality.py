@@ -165,3 +165,37 @@ def piotroski_for(
     if len(periods) < 2:
         return None
     return piotroski_score(periods[0], periods[1])
+
+
+def quality_scores_asof(
+    conn: sqlite3.Connection,
+    *,
+    as_of: str,
+    annual_lag_days: int = ANNUAL_REPORTING_LAG_DAYS,
+    quarterly_lag_days: int = QUARTERLY_REPORTING_LAG_DAYS,
+) -> dict[str, PiotroskiScore]:
+    """Piotroski score per ticker that has one as of ``as_of`` (look-ahead-safe).
+
+    The bulk companion to :func:`piotroski_for` — the live ``analyse`` / ``run-daily``
+    path resolves every name's score once and hands the map to the
+    ``SignalThesisGenerator``. Tickers without two public annual periods are simply
+    absent from the result.
+    """
+    tickers = [
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT ticker FROM fundamental_periods WHERE period_type = 'annual'"
+        )
+    ]
+    out: dict[str, PiotroskiScore] = {}
+    for ticker in tickers:
+        score = piotroski_for(
+            conn,
+            ticker,
+            as_of=as_of,
+            annual_lag_days=annual_lag_days,
+            quarterly_lag_days=quarterly_lag_days,
+        )
+        if score is not None:
+            out[ticker] = score
+    return out

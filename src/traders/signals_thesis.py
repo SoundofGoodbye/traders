@@ -19,9 +19,14 @@ momentum → value → mean-reversion (a multi-factor composite is a future
 refinement). Crucially the fundamental path is **additive**: with no
 ``fundamentals`` (every historical backtest — snapshots aren't point-in-time
 history — and the default tests) behaviour is byte-identical to slice 20.
-A full Piotroski quality score (needs period-by-period statements) and PEAD/SUE
-(needs consensus estimates) are deferred — neither is computable from a single
-snapshot.
+
+Slice 35 (B4) adds an optional ``quality`` map (per-ticker Piotroski F-score from
+the slice-33/34 period series, resolved look-ahead-safe). It gates *only* the
+value thesis: a cheap name with a confirmed weak F-score is vetoed (a value
+trap), a confirmed-strong one is conviction-boosted, and an unknown or too-sparse
+score falls back to the cheap-only thesis — so, like the ``fundamentals`` path,
+it is additive (no ``quality`` => unchanged). PEAD/SUE (needs consensus
+estimates) remains deferred.
 """
 
 from __future__ import annotations
@@ -31,6 +36,7 @@ from datetime import date
 
 from traders.fundamentals import Fundamentals
 from traders.prices import PriceHistory
+from traders.quality import PiotroskiScore
 from traders.signals import DraftThesis
 from traders.signals_lib import (
     book_to_price,
@@ -74,6 +80,14 @@ class SignalThesisGenerator:
     fcf_yield_min: float = 0.05  # FCF/market-cap >= 5%
     value_flags_for_thesis: int = 2  # need >=2 of the 3 cheap flags
     earnings_soon_days: int = 7
+    # Slice 35 (B4) — Piotroski quality gate on the value thesis (optional; absent
+    # => value behaves exactly as slice 26). A cheap name with a *confirmed* low
+    # F-score is a value trap and is vetoed; a confirmed-strong one is conviction-
+    # boosted; an unknown / too-sparse score falls back to the cheap-only thesis.
+    quality: dict[str, PiotroskiScore] | None = None
+    min_piotroski_score: int = 5  # gate: F-score >= 5 to survive the quality check
+    min_piotroski_computable: int = 5  # need >=5 of 9 tests to judge quality at all
+    strong_piotroski_score: int = 7  # at/above this, bump value conviction by one
 
     def generate(self, ticker: str, content: str) -> list[DraftThesis]:
         closes = closes_before(self.history, ticker, self.as_of)
@@ -151,17 +165,42 @@ class SignalThesisGenerator:
         )
         if flags < self.value_flags_for_thesis:
             return None
+        base_conviction = 4 if flags == 3 else 3
+        passes, conviction, quality_note = self._apply_quality_gate(ticker, base_conviction)
+        if not passes:
+            return None  # cheap but a confirmed weak balance sheet -> value trap
         return DraftThesis(
             thesis_type="value",
             direction="long",
-            conviction=4 if flags == 3 else 3,
+            conviction=conviction,
             suggested_size_pct=size,
             exit_condition=f"Exit when the valuation re-rates (cheap flags lapse) or {_STOP}.",
             rationale=(
                 f"[signal] cheap: E/P {_fmt_pct(ey)}, B/P {_fmt(bp)}, "
-                f"FCF yield {_fmt_pct(fy)} ({flags}/3 value flags); value long.{note}"
+                f"FCF yield {_fmt_pct(fy)} ({flags}/3 value flags); value long."
+                f"{quality_note}{note}"
             ),
         )
+
+    def _apply_quality_gate(self, ticker: str, base_conviction: int) -> tuple[bool, int, str]:
+        """Decide a cheap name's fate from its Piotroski score (slice 35 / B4).
+
+        Returns ``(passes, conviction, quality_note)``. With no quality map, no
+        entry for ``ticker``, or too few computable tests, the name *passes*
+        unchanged (additive fallback — backtests and snapshot-only runs behave
+        exactly as slice 26). With enough computable tests it gates: a sub-threshold
+        F-score is vetoed (a cheap, deteriorating name is a value trap), and a
+        strong score bumps conviction by one (capped at 5).
+        """
+        q = self.quality.get(ticker) if self.quality else None
+        if q is None or q.computable < self.min_piotroski_computable:
+            return True, base_conviction, ""
+        if q.score < self.min_piotroski_score:
+            return False, base_conviction, ""
+        conviction = base_conviction
+        if q.score >= self.strong_piotroski_score:
+            conviction = min(5, base_conviction + 1)
+        return True, conviction, f" Quality: Piotroski {q.score}/9 ({q.computable} tests)."
 
     def _earnings_note(self, ticker: str) -> str:
         """' Earnings in Nd — event risk.' when a snapshot shows earnings soon."""
@@ -206,8 +245,10 @@ def build_signal_generator(conn, as_of: date | None = None, **kwargs) -> SignalT
     """
     from traders.fundamentals import load_fundamentals_asof
     from traders.prices import load_history_from_db
+    from traders.quality import quality_scores_asof
 
     when = as_of or date.today()
     history = load_history_from_db(conn)
     kwargs.setdefault("fundamentals", load_fundamentals_asof(conn, as_of=when.isoformat()))
+    kwargs.setdefault("quality", quality_scores_asof(conn, as_of=when.isoformat()))
     return SignalThesisGenerator(history=history, as_of=when, **kwargs)

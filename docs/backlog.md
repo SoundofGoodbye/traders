@@ -58,10 +58,11 @@ This cluster turns "statistically cheap" into something defensible.
 - **Why:** the line between investing and trading.
 - **Depends on:** B1.
 
-### B4 — Gate the `value` thesis on quality + margin of safety  · P0 · S
+### B4 — Gate the `value` thesis on quality + margin of safety  · P0 · S  · 🟡 quality gate shipped (slice 35); margin-of-safety pending B3
 - **Problem:** value thesis fires on ≥2-of-3 cheap flags alone (`signals_thesis._value_thesis`).
 - **Proposal:** require cheap **and** quality-pass **and** margin-of-safety; derive conviction from margin of safety, not flag count.
 - **Depends on:** B2, B3.
+- **Shipped:** slice 35 — the **quality** leg. `_value_thesis` consults a look-ahead-safe `quality` map (`quality.quality_scores_asof`): vetoes a cheap name with a confirmed weak Piotroski F-score (value trap), bumps conviction for a confirmed-strong one, falls back to cheap-only when quality is unknown/sparse. Additive (no quality ⇒ slice-26 behaviour). Plain-English layer surfaces the score. **Still open:** the **margin-of-safety** leg — add once B3 lands, and let margin of safety (not flag count) drive conviction.
 
 ---
 
@@ -137,11 +138,15 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 
 ## Recommended next slice
 
-**B1 shipped as slice 33** (period-by-period fundamentals: schema, ingestion,
-look-ahead-safe accessors). The root unlock is in place.
+**Shipped so far:** B1 (slice 33, fundamentals series), B2-Piotroski (slice 34,
+quality score), B4-quality (slice 35, value-trap veto + conviction fold). The
+value thesis now requires *cheap **and** financially sound* — the review's
+sharpest criticism is substantially closed; the plain-English layer surfaces it.
 
-**Next: B2 (quality / moat screen — ship the deferred Piotroski).** It's the first
-consumer of slice 33's `latest_periods` series, and together with **B4** (gate the
-`value` thesis on quality + margin of safety) it closes the value-trap criticism
-end-to-end — the review's sharpest point. B3 (margin-of-safety estimate) can run
-in parallel; it also reads the slice-33 series.
+**Next: B3 (margin-of-safety / intrinsic-value estimate).** It completes the B4
+gate (cheap **and** quality **and** a margin of safety) and lets margin of safety —
+not flag count — drive conviction; it reads the slice-33 series already in place.
+Alternatives if you'd rather pivot: **B5** (buy-list with price triggers — the
+review's highest-leverage *UX* change, flips the daily-action reflex) or finish the
+**B2 remainder** (ROIC/ROE trend, interest coverage) on the slice-34 `quality`
+module.

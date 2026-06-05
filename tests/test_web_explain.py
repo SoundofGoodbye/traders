@@ -126,6 +126,20 @@ def test_value_strategy_and_glossary():
     assert {"Earnings yield (E/P)", "Book-to-price (B/P)", "FCF yield", "Value flags"} <= terms
 
 
+def test_value_strategy_surfaces_quality_score():
+    ex = explain_thesis(
+        _thesis(
+            thesis_type="value",
+            conviction=5,
+            rationale="[signal] cheap: E/P 8.0%, B/P 0.7, FCF yield 6.0% (3/3 value flags); "
+            "value long. Quality: Piotroski 8/9 (9 tests).",
+            exit_condition="Exit when the valuation re-rates (cheap flags lapse) or a -8% stop.",
+        )
+    )
+    assert "8 out of 9" in ex.strategy and "healthier" in ex.strategy
+    assert "Piotroski score" in {g.term for g in ex.glossary}
+
+
 # --- earnings warning -------------------------------------------------------
 
 

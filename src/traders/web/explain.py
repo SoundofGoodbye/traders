@@ -50,6 +50,7 @@ _RSI_RE = re.compile(r"RSI (n/a|\d+(?:\.\d+)?)")
 _Z_RE = re.compile(r"20-day z (n/a|[+-]?\d+(?:\.\d+)?)")
 _FLAGS_RE = re.compile(r"\((\d)/3 value flags\)")
 _STOP_RE = re.compile(r"(\d+)%\s*stop")
+_PIOTROSKI_RE = re.compile(r"Piotroski (\d)/9")
 
 # (term, definition, trigger substrings) — included when a trigger appears in
 # the thesis's rationale or exit text (matched case-insensitively).
@@ -102,6 +103,13 @@ _GLOSSARY: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "Value flags",
         "How many of the three 'cheap' tests (E/P, B/P, FCF yield) the stock passes.",
         ("value flags",),
+    ),
+    (
+        "Piotroski score",
+        "A 0–9 financial-health score: how many of nine checks on profitability, "
+        "debt, and efficiency the company passes. Higher is healthier — it filters "
+        "out cheap-but-failing 'value traps'.",
+        ("piotroski",),
     ),
     (
         "NAV",
@@ -180,11 +188,18 @@ def _meanrev_strategy(ticker: str, rationale: str) -> str:
 def _value_strategy(ticker: str, rationale: str) -> str:
     flags = _num(_FLAGS_RE.search(rationale))
     count = flags if flags is not None else "several"
-    return (
+    text = (
         f"{ticker} looks cheap on {count} of 3 value yardsticks — earnings, book "
         "value, and cash flow measured against its price. The bet is the market "
         "re-rates it higher over time, so the plan is to buy."
     )
+    pio = _PIOTROSKI_RE.search(rationale)
+    if pio:
+        text += (
+            f" Its financial-health score is {pio.group(1)} out of 9 (higher is "
+            "healthier), so it's cheap *and* sound — not just statistically cheap."
+        )
+    return text
 
 
 def _generic_strategy(ticker: str, thesis_type: str, direction: str) -> str:

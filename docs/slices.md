@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–34 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–34 (from the persona-review [backlog](backlog.md): items B1, B2) add period-by-period fundamentals ingestion and a Piotroski quality score over them. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–35 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–35 (from the persona-review [backlog](backlog.md): items B1, B2, B4) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a quality gate on the value thesis that vetoes cheap-but-deteriorating "value traps". The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -253,6 +253,35 @@ quarterly rows are ignored. Pure stdlib, no migration, no new dependency; fully
 hermetic. **Next (B4):** gate the `SignalThesisGenerator` value thesis on the
 score (cheap *and* quality-pass), and fold it into conviction. ROIC/ROE trend and
 interest coverage (the rest of B2) can extend `quality` on the same pattern.
+
+## Slice 35 — Quality gate on the value thesis
+
+[Backlog](backlog.md) item **B4** — the slice that makes the fundamental-depth
+work user-visible and closes the persona review's sharpest criticism: the value
+thesis no longer fires on cheapness alone (a single-snapshot value-trap
+generator). The `SignalThesisGenerator` gains an optional `quality` map
+(per-ticker `PiotroskiScore`, resolved look-ahead-safe by
+`quality.quality_scores_asof`), and `_value_thesis` consults it:
+
+- a cheap name with a **confirmed weak** F-score (`computable ≥ 5` and
+  `score < 5`) is **vetoed** — no thesis (the value-trap filter);
+- a **confirmed strong** score (`≥ 7`) **bumps conviction** by one (capped at 5)
+  — folding quality into conviction, per the review's "conviction should mean
+  something" note;
+- an **unknown or too-sparse** score (no entry, or `computable < 5`) **falls back**
+  to the slice-26 cheap-only thesis.
+
+**Additive by construction**, exactly like the slice-26 fundamentals path: with no
+`quality` map (every historical backtest, and the default tests) behaviour is
+byte-identical to slice 26, so nothing regresses. The passing score is recorded in
+the rationale (`Quality: Piotroski N/9 (M tests)`), and the plain-English layer
+(`web.explain`) gains a Piotroski glossary entry plus a "financial-health score is
+N out of 9" sentence so a beginner sees *cheap and sound*, not jargon.
+`build_signal_generator` resolves the map automatically, so `analyse --generator
+signals` / `run-daily` pick it up once `ingest-fundamental-periods` has run. No
+migration, no new dependency. **Deferred:** the *margin-of-safety* leg of the gate
+(B3) — value will require cheap **and** quality-pass **and** a margin of safety
+once an intrinsic-value estimate lands.
 
 ## Future
 
