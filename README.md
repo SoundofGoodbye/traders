@@ -205,3 +205,4 @@ uv run pytest
 
 See `docs/OPERATING.md` for the day-to-day runbook (what to check, how to tell if it's working), `docs/slices.md` for the build order, and `docs/architecture.md` for the agent shape.
 Verified by Mira — slice 218 commit-on-approve.
+Verified by Mira — slice 219 commit-on-approve.
