@@ -132,9 +132,10 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 
 ## P2 — Portfolio-level view
 
-### B14 — Exposure view: sector / correlation / concentration  · P2 · M
+### B14 — Exposure view: sector / correlation / concentration  · P2 · M  · 🟡 concentration + correlation shipped (slice 46); sector needs data
 - **Problem:** PM does a concentration check, but the UI has no portfolio-level exposure picture.
 - **Proposal:** sector weights, pairwise correlation/cluster, single-name concentration on a portfolio/Positions surface.
+- **Shipped:** slice 46 — `traders.exposure` + `traders exposure`: concentration (largest/top-3/Herfindahl) and lockstep-correlated pairs over open positions. **Still open:** sector weights (needs per-ticker sector data) and a web surface.
 
 ### B15 — Capital allocation & insider signals  · P2 · M
 - **Problem:** no view of buybacks, dividend history, insider buying, or capital-allocation track record — core to owner-mindset judgment.

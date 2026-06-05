@@ -371,6 +371,17 @@ def main(argv: list[str] | None = None) -> None:
         help="Price source whose coverage to check (default: tiingo)",
     )
 
+    exposure_p = sub.add_parser(
+        "exposure", help="Concentration + hidden correlation across your open positions"
+    )
+    exposure_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    exposure_p.add_argument(
+        "--min-corr",
+        type=float,
+        default=0.8,
+        help="Flag position pairs correlated at/above this (default: 0.8)",
+    )
+
     metrics_p = sub.add_parser("metrics", help="Score realized results against the strategy goal")
     metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     metrics_p.add_argument(
@@ -993,6 +1004,30 @@ def main(argv: list[str] | None = None) -> None:
         )
         if report.skipped:
             print(f"  skipped: {', '.join(report.skipped)}")
+        return
+
+    if args.cmd == "exposure":
+        from traders.exposure import exposure_report
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        report = exposure_report(conn, min_corr=args.min_corr)
+        conn.close()
+        c = report.concentration
+        if c.num_positions == 0:
+            print("No open positions.")
+            return
+        print(f"Open positions: {c.num_positions} — total size {c.total_size_pct:.1f}%")
+        print(
+            f"  largest: {c.largest_ticker} {c.largest_pct:.1f}% · "
+            f"top 3: {c.top3_pct:.1f}% · concentration index {c.herfindahl:.2f}"
+        )
+        if report.correlated_pairs:
+            print("  highly-correlated pairs (effectively the same bet):")
+            for p in report.correlated_pairs:
+                print(f"    {p.a} ~ {p.b}: {p.correlation:+.2f}")
+        else:
+            print("  no highly-correlated pairs among open positions.")
         return
 
     if args.cmd == "metrics":

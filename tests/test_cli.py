@@ -974,6 +974,11 @@ def test_cli_buylist_set_and_status(tmp_path, capsys):
     assert "AAA" in out and "TRIGGERED" in out
 
 
+def test_cli_exposure_no_positions(tmp_path, capsys):
+    main(["exposure", "--db", str(tmp_path / "t.db")])
+    assert "No open positions" in capsys.readouterr().out
+
+
 def test_cli_universe_reports_coverage(tmp_path, capsys):
     wl = tmp_path / "wl.json"
     wl.write_text(json.dumps({"sp100": ["AAPL"], "eurostoxx50": ["MC.PA"]}))

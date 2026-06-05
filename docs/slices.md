@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–45 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–46 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -438,6 +438,17 @@ the honest coverage and names the skipped tickers. The README's Prices section n
 states the gap and points at the command. The *fix* (an EU-capable price source)
 stays a future data slice; this closes the dishonest-advertising half. No
 migration, no new dependency.
+
+## Slice 46 — Portfolio exposure: concentration + hidden correlation
+
+[Backlog](backlog.md) item **B14** — the PM checks concentration at decision time,
+but nothing shows the standing shape of the book. `traders.exposure.exposure_report`
+summarizes the open positions' concentration (largest name, top-3, a Herfindahl
+index) and surfaces pairs that move in lockstep (Pearson over recent overlapping
+daily returns ≥ a threshold) — the "you think you're diversified but these are the
+same bet" risk a size table hides. `traders exposure [--min-corr]`. Sector exposure
+is deferred (needs per-ticker sector data the system doesn't ingest). Pure stdlib
+(`statistics.correlation`); no migration, no new dependency.
 
 ## Future
 
