@@ -254,9 +254,11 @@ def _default_edgar_fetcher() -> Callable[[str], list[dict[str, Any]]]:
     cik_map: dict[str, str] = {}
 
     def _fetch_json(url: str) -> Any:
+        from traders.net import read_capped
+
         req = urllib.request.Request(url, headers={"User-Agent": ua})
         with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.load(resp)
+            return json.loads(read_capped(resp))
 
     def _load_cik_map() -> dict[str, str]:
         payload = _fetch_json("https://www.sec.gov/files/company_tickers.json")
@@ -426,9 +428,11 @@ def _default_edgar_document_fetcher() -> Callable[[str], str]:
     def fetch(url: str) -> str:
         from traders.filing_text import extract_text
 
+        from traders.net import MAX_FILING_BYTES, read_capped
+
         req = urllib.request.Request(url, headers={"User-Agent": ua})
         with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (vetted SEC URLs)
-            return extract_text(resp.read().decode("utf-8", "replace"))
+            return extract_text(read_capped(resp, MAX_FILING_BYTES).decode("utf-8", "replace"))
 
     return fetch
 

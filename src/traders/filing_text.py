@@ -17,7 +17,14 @@ from __future__ import annotations
 import html as _html
 import re
 
-_SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+# <script>/<style> blocks are stripped in one linear pass (see
+# _strip_script_style) rather than a single backreference + lazy-DOTALL regex,
+# which backtracked quadratically on adversarial filings (audit H2).
+_SCRIPT_STYLE_OPEN = re.compile(r"<(script|style)\b[^>]*>", re.IGNORECASE)
+_SCRIPT_STYLE_CLOSE = {
+    "script": re.compile(r"</script\s*>", re.IGNORECASE),
+    "style": re.compile(r"</style\s*>", re.IGNORECASE),
+}
 _TAG = re.compile(r"<[^>]+>")
 _WS = re.compile(r"\s+")
 _ITEM_BOUNDARY = re.compile(r"\bItem\s+\d+[A-Za-z]?\b")
@@ -25,11 +32,31 @@ _ITEM_BOUNDARY = re.compile(r"\bItem\s+\d+[A-Za-z]?\b")
 DEFAULT_MAX_CHARS = 2000
 
 
+def _strip_script_style(raw: str) -> str:
+    """Remove <script>/<style> blocks in one linear scan (audit H2).
+
+    For each opening tag, jump to its matching close; an unterminated block
+    drops to end-of-input. No backreferences, so no catastrophic backtracking.
+    """
+    out: list[str] = []
+    pos = 0
+    while True:
+        m = _SCRIPT_STYLE_OPEN.search(raw, pos)
+        if m is None:
+            out.append(raw[pos:])
+            return "".join(out)
+        out.append(raw[pos : m.start()])
+        close = _SCRIPT_STYLE_CLOSE[m.group(1).lower()].search(raw, m.end())
+        if close is None:
+            return "".join(out)
+        pos = close.end()
+
+
 def extract_text(raw: str | None) -> str:
     """Strip HTML to collapsed plain text (scripts/styles/tags removed, entities decoded)."""
     if not raw:
         return ""
-    without_code = _SCRIPT_STYLE.sub(" ", raw)
+    without_code = _strip_script_style(raw)
     detagged = _TAG.sub(" ", without_code)
     return _WS.sub(" ", _html.unescape(detagged)).strip()
 

@@ -31,13 +31,18 @@ _STOOQ_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 def _default_csv_fetcher() -> Callable[[str], str]:
     """Build the real Stooq fetcher (stdlib urllib). Network only when called."""
+    import urllib.parse
     import urllib.request
 
+    from traders.net import read_capped
+
     def fetch(symbol: str) -> str:
-        url = _STOOQ_URL.format(symbol=symbol)
+        # Quote the symbol (audit L1): keep a stray '&'/'#'/'?' from breaking out
+        # of the query string, matching the Tiingo fetcher's handling.
+        url = _STOOQ_URL.format(symbol=urllib.parse.quote(symbol, safe=""))
         req = urllib.request.Request(url, headers={"User-Agent": "traders-paper/1.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return read_capped(resp).decode("utf-8", errors="replace")
 
     return fetch
 

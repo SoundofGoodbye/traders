@@ -142,9 +142,11 @@ def companyfacts_fetcher() -> Callable[[str], dict[str, Any]]:
     cik_map: dict[str, str] = {}
 
     def _get_json(url: str) -> Any:
+        from traders.net import read_capped
+
         req = urllib.request.Request(url, headers={"User-Agent": ua})
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 (vetted SEC URLs)
-            return json.loads(resp.read().decode())
+            return json.loads(read_capped(resp).decode())
 
     def fetch(ticker: str) -> dict[str, Any]:
         if not cik_map:

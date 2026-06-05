@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from traders.filing_text import extract_item, extract_text
 
 
@@ -20,6 +22,16 @@ def test_extract_text_strips_tags_scripts_and_entities():
 def test_extract_text_empty():
     assert extract_text("") == ""
     assert extract_text(None) == ""
+
+
+def test_extract_text_linear_on_pathological_unclosed_scripts():
+    # Many unclosed <script> opens backtracked quadratically in the old regex
+    # (audit H2). The linear stripper handles them in well under a second.
+    raw = "<script>" * 40000
+    start = time.perf_counter()
+    text = extract_text(raw)
+    assert time.perf_counter() - start < 2.0
+    assert "script" not in text.lower()
 
 
 def test_extract_item_returns_section_body_not_toc():

@@ -76,6 +76,8 @@ def _default_tiingo_fetcher(
     import urllib.parse
     import urllib.request
 
+    from traders.net import read_capped
+
     tok = (token or os.environ.get("TIINGO_API_KEY", "")).strip()
     if not tok:
         raise RuntimeError(
@@ -91,6 +93,6 @@ def _default_tiingo_fetcher(
         url = f"{base}?{urllib.parse.urlencode(params)}"
         req = urllib.request.Request(url, headers={"User-Agent": "traders-paper/1.0"})
         with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.read().decode("utf-8", errors="replace")
+            return read_capped(resp).decode("utf-8", errors="replace")
 
     return fetch
