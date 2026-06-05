@@ -75,6 +75,36 @@ def test_positions_route_plain_english(tmp_path):
     assert "on paper" in text  # the unrealized P&L framing
 
 
+def test_positions_shows_broken_premise(tmp_path):
+    # B6: an open position whose business deteriorated gets a premise warning.
+    from traders.fundamental_periods import periods_from_statements, save_periods
+
+    db_path = tmp_path / "t.db"
+    _seed(db_path, tmp_path)  # opens a long position on AAA
+    conn = connect(db_path)
+    save_periods(
+        conn,
+        periods_from_statements(
+            "AAA",
+            [
+                {
+                    "period_end": "2024-12-31",
+                    "period_type": "annual",
+                    "available_at": "2025-02-15",
+                    "net_income": -50.0,  # lossmaking -> premise broken
+                    "current_assets": 100.0,
+                    "current_liabilities": 200.0,
+                }
+            ],
+        ),
+    )
+    conn.close()
+    client = TestClient(create_app(db_path))
+    text = client.get("/positions").text
+    assert "Premise check" in text
+    assert "lossmaking" in text
+
+
 def test_routes_ok_on_empty_db(tmp_path):
     db_path = tmp_path / "empty.db"
     client = TestClient(create_app(db_path))

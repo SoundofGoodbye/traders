@@ -25,7 +25,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from traders import buylist, feedback, jobs
+from traders import buylist, feedback, intact, jobs
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
 from traders.prices import load_history_from_db
@@ -36,10 +36,17 @@ from traders.web.prices import PriceFn
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
-def _open_position_view(position: queries.Position, price_fn: PriceFn | None) -> dict[str, Any]:
+def _open_position_view(
+    conn: sqlite3.Connection, position: queries.Position, price_fn: PriceFn | None
+) -> dict[str, Any]:
     current = price_fn(position.ticker) if price_fn is not None else None
     pnl = compute_pnl_pct(position.direction or "long", position.entry_price, current)
-    return {"p": position, "current_price": current, "pnl_pct": pnl}
+    return {
+        "p": position,
+        "current_price": current,
+        "pnl_pct": pnl,
+        "intact": intact.thesis_intact(conn, position.ticker),
+    }
 
 
 def _closed_position_view(position: queries.Position) -> dict[str, Any]:
@@ -157,7 +164,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             request,
             "positions.html",
             {
-                "open_positions": [_open_position_view(p, price_fn) for p in open_rows],
+                "open_positions": [_open_position_view(conn, p, price_fn) for p in open_rows],
                 "closed_positions": [_closed_position_view(p) for p in closed_rows],
                 "has_prices": price_fn is not None,
             },

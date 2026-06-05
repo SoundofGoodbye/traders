@@ -79,10 +79,11 @@ persona thinks in years and businesses.
 - **Depends on:** stands alone with manual targets; richer with B3.
 - **Shipped:** slice 37 — `traders.buylist` + migration `009`: a `buy_list` table (ticker, target buy-below, note), `set/remove/load/get`, and `evaluate` (triggered + distance vs the latest close, plus the slice-36 suggested buy-below). `traders buylist {set,remove,status}`. Slice 38 — the `/buy-list` web page: read view with plain-English "Ready"/"% to go" status + suggested buy-below, CSRF-guarded add/update/remove forms, new nav entry.
 
-### B6 — Thesis-intact monitoring (business-level)  · P1 · M
+### B6 — Thesis-intact monitoring (business-level)  · P1 · M  · ✅ shipped (slice 43)
 - **Problem:** exits are price/stop/time only; nothing checks whether the *reason to own* still holds.
 - **Proposal:** per-thesis "intact checks" (earnings still growing, margin not collapsing, no debt/cut event); flag a broken premise regardless of price.
 - **Depends on:** B1.
+- **Shipped:** slice 43 — `traders.intact.thesis_intact` flags lossmaking / cash burn / tight liquidity / weak Piotroski / collapsing margin from the slice-33 series (look-ahead-safe, plain English); surfaced as a "⚠ Premise check" row on open positions.
 
 ### B7 — Longer-horizon, total-return framing  · P1 · S/M
 - **Problem:** framing is short-horizon; no dividends/total return, no multi-quarter holding view.

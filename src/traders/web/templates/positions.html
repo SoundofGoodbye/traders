@@ -53,6 +53,10 @@
               </form>
             </td>
           </tr>
+          {% if v.intact and v.intact.checked and not v.intact.intact %}
+            <tr><td colspan="8" class="row-warn">⚠ Premise check: {{ v.intact.warnings|join(" ") }}
+              <span class="meta">— the reason to own this may have weakened; re-check before adding.</span></td></tr>
+          {% endif %}
         {% endfor %}
       </tbody>
     </table>
