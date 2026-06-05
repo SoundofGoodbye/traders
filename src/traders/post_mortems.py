@@ -53,7 +53,7 @@ def compute_pnl_pct(
     direction: str, entry_price: float | None, exit_price: float | None
 ) -> float | None:
     """Direction-aware PnL %. Returns None when prices are missing."""
-    if entry_price is None or exit_price is None or entry_price == 0:
+    if entry_price is None or exit_price is None or entry_price <= 0:
         return None
     if direction == "short":
         return (entry_price - exit_price) / entry_price * 100.0

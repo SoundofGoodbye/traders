@@ -62,6 +62,12 @@ def test_pnl_zero_entry_returns_none():
     assert compute_pnl_pct("long", 0.0, 10.0) is None
 
 
+def test_pnl_negative_entry_returns_none():
+    # A negative entry price must not flip a loss into a reported gain (audit H1).
+    assert compute_pnl_pct("long", -5.0, 10.0) is None
+    assert compute_pnl_pct("short", -5.0, 10.0) is None
+
+
 def test_stub_generator_long_win():
     gen = StubPostMortemGenerator()
     draft = gen.generate(

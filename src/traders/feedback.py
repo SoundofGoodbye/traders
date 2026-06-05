@@ -26,6 +26,11 @@ from datetime import datetime, timezone
 
 ACTIONS = ("fill", "partial", "skip", "sell")
 
+# A position can never exceed 100% of NAV; sizes outside (0, 100] are rejected at
+# every write boundary (audit H1) so the exposure/concentration math and the PM's
+# size cap stay meaningful.
+_MAX_SIZE_PCT = 100.0
+
 
 class FeedbackError(ValueError):
     """Raised when the requested feedback can't be reconciled with state."""
@@ -47,6 +52,20 @@ class FeedbackEvent:
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _validate_open(price: float, size_pct: float) -> None:
+    """Enforce the position invariants the rest of the system assumes (audit H1).
+
+    Every path that opens a position funnels through here. A non-positive price
+    corrupts PnL (and can flip a loss to a gain in ``compute_pnl_pct``); a size
+    outside ``(0, 100]`` poisons the exposure/concentration math and silently
+    bypasses the PM's size cap. Fail loud at the boundary instead.
+    """
+    if not price > 0:
+        raise FeedbackError(f"price must be > 0 (got {price})")
+    if not 0 < size_pct <= _MAX_SIZE_PCT:
+        raise FeedbackError(f"size_pct must be in (0, {_MAX_SIZE_PCT:g}] (got {size_pct})")
 
 
 def _thesis_row(conn: sqlite3.Connection, thesis_id: int) -> tuple[str, float]:
@@ -145,10 +164,11 @@ def record_fill(
     but considers it a full execution (rare; usually use `partial`).
     """
     ticker, suggested = _thesis_row(conn, thesis_id)
+    size = float(size_pct) if size_pct is not None else suggested
+    _validate_open(float(price), size)
     if _open_position_for_thesis(conn, thesis_id) is not None:
         raise FeedbackError(f"thesis {thesis_id} already has an open position; sell it first")
     ts = reported_at or _now()
-    size = float(size_pct) if size_pct is not None else suggested
     position_id = _open_position(
         conn,
         ticker=ticker,
@@ -193,6 +213,7 @@ def record_partial(
     `size_pct` is required — a partial without a size is just a fill.
     """
     ticker, _suggested = _thesis_row(conn, thesis_id)
+    _validate_open(float(price), float(size_pct))
     if _open_position_for_thesis(conn, thesis_id) is not None:
         raise FeedbackError(f"thesis {thesis_id} already has an open position; sell it first")
     ts = reported_at or _now()
@@ -235,6 +256,8 @@ def record_skip(
 ) -> FeedbackEvent:
     """Record that the user declined the suggested thesis. Log only."""
     _thesis_row(conn, thesis_id)
+    if _open_position_for_thesis(conn, thesis_id) is not None:
+        raise FeedbackError(f"thesis {thesis_id} has an open position; sell it before skipping")
     ts = reported_at or _now()
     feedback_id = _insert_feedback(
         conn,

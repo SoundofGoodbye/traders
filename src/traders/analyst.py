@@ -9,10 +9,32 @@ the stub.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 
-from traders.signals import StubThesisGenerator, ThesisGenerator
+from traders.signals import DIRECTIONS, THESIS_TYPES, StubThesisGenerator, ThesisGenerator
+
+logger = logging.getLogger(__name__)
+
+# Defense in depth (audit H1): the Analyst is the single persistence boundary for
+# generator output. The LLM generator clamps its own output, but the
+# ThesisGenerator protocol does not enforce ranges — so an out-of-contract draft
+# is dropped here rather than written to `theses`, where the PM and exposure math
+# would trust it blindly.
+_MAX_SIZE_PCT = 100.0
+
+
+def _is_valid_draft(draft: object) -> bool:
+    try:
+        return (
+            draft.thesis_type in THESIS_TYPES
+            and draft.direction in DIRECTIONS
+            and 1 <= draft.conviction <= 5
+            and 0 < draft.suggested_size_pct <= _MAX_SIZE_PCT
+        )
+    except TypeError:
+        return False
 
 
 def _latest_research_run_id(conn: sqlite3.Connection) -> int | None:
@@ -57,6 +79,9 @@ def run(
     rows: list[tuple] = []
     for ticker, content in notes:
         for draft in gen.generate(ticker, content):
+            if not _is_valid_draft(draft):
+                logger.warning("Analyst: dropping out-of-contract draft for %s: %r", ticker, draft)
+                continue
             rows.append(
                 (
                     ticker,

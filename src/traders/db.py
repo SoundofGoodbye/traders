@@ -39,11 +39,25 @@ def apply_migrations(
         version = int(sql_file.name.split("_", 1)[0])
         if version in applied:
             continue
-        conn.executescript(sql_file.read_text())
-        conn.execute(
-            "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)",
-            (version, datetime.now(timezone.utc).isoformat()),
+        # Apply the migration DDL and its version bookkeeping atomically (audit
+        # M4): wrap the whole thing in one transaction so a migration that fails
+        # partway leaves neither half-applied schema nor a recorded version (which
+        # would otherwise wedge startup on the next run). `executescript` issues an
+        # implicit COMMIT first, so the BEGIN/COMMIT here bound a single unit.
+        # `version` is an int from the filename and `applied_at` a generated ISO
+        # timestamp — neither is external input, so inlining them is safe.
+        applied_at = datetime.now(timezone.utc).isoformat()
+        script = (
+            "BEGIN;\n"
+            f"{sql_file.read_text()}\n"
+            "INSERT INTO schema_migrations (version, applied_at) "
+            f"VALUES ({version}, '{applied_at}');\n"
+            "COMMIT;"
         )
-        conn.commit()
+        try:
+            conn.executescript(script)
+        except Exception:
+            conn.rollback()
+            raise
         new.append(version)
     return new

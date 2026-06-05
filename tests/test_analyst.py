@@ -172,3 +172,16 @@ def test_run_with_research_run_but_no_notes_returns_run_id_zero_theses(db, tmp_p
     run_id, n = analyst_run(db, research_run_id=research_id)
     assert run_id == 1
     assert n == 0
+
+
+def test_run_skips_out_of_contract_drafts(db, tmp_path):
+    # Defense in depth (audit H1): a draft outside the protocol's ranges is
+    # dropped at the Analyst boundary, never persisted for the PM to trust.
+    research_id = _seed_research(db, tmp_path, ["AAA", "BBB"], date(2026, 5, 20))
+    oversize = _draft(size=999.0)  # size > 100%
+    bad_type = _draft(thesis_type="bogus")  # not a known thesis_type
+    fake = FakeGenerator({"AAA": [oversize, _draft(size=2.0)], "BBB": [bad_type]})
+    _, n = analyst_run(db, generator=fake, research_run_id=research_id)
+    assert n == 1
+    rows = db.execute("SELECT ticker, suggested_size_pct FROM theses").fetchall()
+    assert rows == [("AAA", 2.0)]

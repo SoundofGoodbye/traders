@@ -202,3 +202,39 @@ def test_feedback_flow_feeds_reviewer(db, tmp_path):
     outcome = db.execute("SELECT outcome FROM post_mortems").fetchone()[0]
     assert "AAA" in outcome
     assert "+20.00%" in outcome
+
+
+def test_record_fill_rejects_nonpositive_price(db, tmp_path):
+    thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
+    for bad in (0.0, -5.0):
+        with pytest.raises(FeedbackError, match="price must be > 0"):
+            record_fill(db, thesis_id=thesis_id, price=bad)
+    assert db.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 0
+
+
+def test_record_fill_rejects_out_of_range_size(db, tmp_path):
+    thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
+    for bad in (0.0, -2.0, 150.0):
+        with pytest.raises(FeedbackError, match="size_pct"):
+            record_fill(db, thesis_id=thesis_id, price=100.0, size_pct=bad)
+    assert db.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 0
+
+
+def test_record_partial_rejects_nonpositive_price(db, tmp_path):
+    thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
+    with pytest.raises(FeedbackError, match="price must be > 0"):
+        record_partial(db, thesis_id=thesis_id, price=0.0, size_pct=1.0)
+
+
+def test_record_partial_rejects_out_of_range_size(db, tmp_path):
+    thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
+    for bad in (0.0, -1.0, 120.0):
+        with pytest.raises(FeedbackError, match="size_pct"):
+            record_partial(db, thesis_id=thesis_id, price=100.0, size_pct=bad)
+
+
+def test_record_skip_rejects_when_position_open(db, tmp_path):
+    thesis_id, _ = _seed_thesis(db, tmp_path, "AAA", date(2026, 5, 1))
+    record_fill(db, thesis_id=thesis_id, price=100.0)
+    with pytest.raises(FeedbackError, match="sell it before skipping"):
+        record_skip(db, thesis_id=thesis_id)
