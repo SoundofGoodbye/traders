@@ -108,6 +108,18 @@ def test_run_daily_propagates_agent_errors(tmp_path):
     conn.close()
 
 
+def test_run_daily_warns_on_empty_stage(tmp_path, caplog):
+    import logging
+
+    wl = _watchlist(tmp_path, tickers=())  # empty watchlist -> zero candidates
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn)
+    with caplog.at_level(logging.WARNING, logger="traders.orchestrator"):
+        run_daily(conn, watchlist_path=wl, batch_size=2)
+    conn.close()
+    assert any("no candidates" in r.getMessage().lower() for r in caplog.records)
+
+
 def test_run_weekly_no_closed_positions(tmp_path):
     db = tmp_path / "t.db"
     conn = connect(db)

@@ -412,3 +412,18 @@ def test_edgar_8k_not_enriched():
         filings_fn=lambda t: filings, document_fetcher=lambda url: "Item 1A. Risk Factors stuff."
     )
     assert src.fetch("AAPL")[0].snippet == "AAPL filed 8-K on 2024-03-01."  # 8-K left as metadata
+
+
+def test_yfinance_fetch_logs_warning_on_error(caplog):
+    # The DataSource contract still swallows to [] (one flaky ticker can't kill a
+    # run), but a systematic failure is now visible in the log (audit M2).
+    import logging
+
+    def boom(_ticker):
+        raise RuntimeError("network down")
+
+    src = YFinanceDataSource(ticker_fn=boom)
+    with caplog.at_level(logging.WARNING, logger="traders.data_sources"):
+        out = src.fetch("AAA")
+    assert out == []
+    assert any("AAA" in r.getMessage() for r in caplog.records)

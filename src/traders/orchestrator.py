@@ -13,6 +13,7 @@ something needs attention before the next daily cycle.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,8 @@ from traders.research import run as research_run
 from traders.reviewer import run as reviewer_run
 from traders.scout import run as scout_run
 from traders.signals import ThesisGenerator
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -76,10 +79,20 @@ def run_daily(
         params=p,
         history=scout_history,
     )
+    if not picks:
+        logger.warning("Scout produced no candidates for run %s", scout_id)
     research_id, tickers = research_run(conn, data_source=data_source, scout_run_id=scout_id)
+    if not tickers:
+        logger.warning(
+            "Researcher wrote no notes for run %s — a data outage looks like a quiet "
+            "market here; check the data source",
+            research_id,
+        )
     analyst_id, n_theses = analyst_run(
         conn, generator=analyst_generator, research_run_id=research_id
     )
+    if not n_theses:
+        logger.warning("Analyst produced no theses for run %s", analyst_id)
     report = pm_run(
         conn,
         analyst_run_id=analyst_id,

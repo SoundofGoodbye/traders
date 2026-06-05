@@ -10,12 +10,32 @@ later agents (and the Reviewer) can audit claims back to data.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 
 from traders.data_sources import DataPoint, DataSource, StubDataSource
 
 _KIND_ORDER = ("fundamentals", "filing", "news")
+
+# Untrusted source text (filing/news titles + snippets) is neutralized before it
+# enters the note (audit M1): collapse whitespace so a source can't forge note
+# structure (a fake "##" heading or "-" bullet), and strip the LLM fence tokens
+# so it can't close the <research_note>/<thesis_text> block the Analyst and
+# Reviewer wrap the note in.
+_FENCE_TOKENS = re.compile(r"</?(?:research_note|thesis_text)\s*>", re.IGNORECASE)
+
+
+def _sanitize_source_text(value: object) -> str:
+    return _FENCE_TOKENS.sub("[tag]", " ".join(str(value).split()))
+
+
+def _bullets(points: list[DataPoint]) -> list[str]:
+    return [
+        f"- **{_sanitize_source_text(p.title)}**"
+        f" ({_sanitize_source_text(p.published_at)}): {_sanitize_source_text(p.snippet)}"
+        for p in points
+    ]
 
 
 def _latest_scout_run_id(conn: sqlite3.Connection) -> int | None:
@@ -52,13 +72,11 @@ def render_content(ticker: str, points: list[DataPoint]) -> str:
             continue
         lines.append("")
         lines.append(f"## {kind}")
-        for p in items:
-            lines.append(f"- **{p.title}** ({p.published_at}): {p.snippet}")
+        lines.extend(_bullets(items))
     for kind, items in sections.items():
         lines.append("")
         lines.append(f"## {kind}")
-        for p in items:
-            lines.append(f"- **{p.title}** ({p.published_at}): {p.snippet}")
+        lines.extend(_bullets(items))
     return "\n".join(lines)
 
 

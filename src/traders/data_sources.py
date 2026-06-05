@@ -8,9 +8,12 @@ touching the Researcher.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Any, Callable, Protocol
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -174,7 +177,8 @@ class YFinanceDataSource:
     def fetch(self, ticker: str) -> list[DataPoint]:
         try:
             handle = self._ticker_fn(ticker)
-        except Exception:
+        except Exception as e:
+            logger.warning("yfinance lookup failed for %s: %s", ticker, e)
             return []
         points: list[DataPoint] = []
         points.extend(self._news_points(ticker, handle))
@@ -186,7 +190,8 @@ class YFinanceDataSource:
     def _news_points(self, ticker: str, handle: Any) -> list[DataPoint]:
         try:
             raw = handle.news
-        except Exception:
+        except Exception as e:
+            logger.warning("news fetch failed for %s: %s", ticker, e)
             return []
         if not raw:
             return []
@@ -346,7 +351,8 @@ class EdgarDataSource:
     def fetch(self, ticker: str) -> list[DataPoint]:
         try:
             raw = self._filings_fn(ticker)
-        except Exception:
+        except Exception as e:
+            logger.warning("EDGAR filings fetch failed for %s: %s", ticker, e)
             return []
         if not raw:
             return []
