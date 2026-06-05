@@ -351,3 +351,64 @@ def test_make_data_source_edgar_requires_env(monkeypatch):
     monkeypatch.setenv("TRADERS_EDGAR_UA", "Test test@example.com")
     ds = make_data_source("edgar")
     assert isinstance(ds, EdgarDataSource)
+
+
+# ---- EDGAR filing-text enrichment (slice 48 / B12) -------------------------
+
+
+def test_edgar_enriches_10k_snippet_with_section_excerpt():
+    from traders.data_sources import EdgarDataSource
+
+    filings = [
+        {
+            "form": "10-K",
+            "filingDate": "2024-02-15",
+            "accessionNumber": "0000320193-24-000123",
+            "primaryDocument": "aapl.htm",
+            "cik": "320193",
+        }
+    ]
+    doc = "Item 1A. Risk Factors We face supply-chain and FX risk. Item 1B. Other None."
+    src = EdgarDataSource(filings_fn=lambda t: filings, document_fetcher=lambda url: doc)
+    points = src.fetch("AAPL")
+    assert len(points) == 1
+    assert points[0].snippet.startswith("AAPL filed 10-K on 2024-02-15.")
+    assert "Risk Factors We face supply-chain" in points[0].snippet
+    assert "Other None" not in points[0].snippet  # stopped at the next Item
+
+
+def test_edgar_without_document_fetcher_keeps_metadata_snippet():
+    from traders.data_sources import EdgarDataSource
+
+    filings = [{"form": "10-K", "filingDate": "2024-02-15", "cik": "320193"}]
+    src = EdgarDataSource(filings_fn=lambda t: filings)
+    assert src.fetch("AAPL")[0].snippet == "AAPL filed 10-K on 2024-02-15."
+
+
+def test_edgar_document_fetch_error_degrades_gracefully():
+    from traders.data_sources import EdgarDataSource
+
+    def boom(url):
+        raise RuntimeError("network down")
+
+    filings = [
+        {
+            "form": "10-K",
+            "filingDate": "2024-02-15",
+            "accessionNumber": "x",
+            "primaryDocument": "d.htm",
+            "cik": "1",
+        }
+    ]
+    src = EdgarDataSource(filings_fn=lambda t: filings, document_fetcher=boom)
+    assert src.fetch("AAPL")[0].snippet == "AAPL filed 10-K on 2024-02-15."
+
+
+def test_edgar_8k_not_enriched():
+    from traders.data_sources import EdgarDataSource
+
+    filings = [{"form": "8-K", "filingDate": "2024-03-01", "cik": "1"}]
+    src = EdgarDataSource(
+        filings_fn=lambda t: filings, document_fetcher=lambda url: "Item 1A. Risk Factors stuff."
+    )
+    assert src.fetch("AAPL")[0].snippet == "AAPL filed 8-K on 2024-03-01."  # 8-K left as metadata

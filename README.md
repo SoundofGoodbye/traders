@@ -80,7 +80,7 @@ Recognized keys: `TIINGO_API_KEY` (prices), `TRADERS_EDGAR_UA` (EDGAR research),
 
 ## Data sources
 
-The Researcher reads evidence through a `DataSource` protocol; the default is `StubDataSource` (deterministic fixture data, no I/O). Two real adapters are opt-in: `YFinanceDataSource` (news + fundamentals, slice 9) and `EdgarDataSource` (recent 10-K/10-Q/8-K filings from SEC EDGAR, slice 10):
+The Researcher reads evidence through a `DataSource` protocol; the default is `StubDataSource` (deterministic fixture data, no I/O). Real adapters are opt-in: `YFinanceDataSource` (news + fundamentals, slice 9), `EdgarDataSource` (recent 10-K/10-Q/8-K filings from SEC EDGAR, slice 10), and `edgar-full` (slice 48 — like `edgar`, but enriches 10-K/10-Q snippets with a real Risk-Factors/MD&A excerpt):
 
 ```bash
 uv sync --extra realdata                                # installs yfinance

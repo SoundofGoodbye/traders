@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> None:
     research.add_argument(
         "--data-source",
         dest="data_source",
-        choices=("stub", "yfinance", "edgar"),
+        choices=("stub", "yfinance", "edgar", "edgar-full"),
         default="stub",
         help="Evidence source for the Researcher (default: stub)",
     )
@@ -276,7 +276,7 @@ def main(argv: list[str] | None = None) -> None:
     daily.add_argument(
         "--data-source",
         dest="data_source",
-        choices=("stub", "yfinance", "edgar"),
+        choices=("stub", "yfinance", "edgar", "edgar-full"),
         default="stub",
         help="Evidence source for the Researcher step (default: stub)",
     )
@@ -705,7 +705,7 @@ def main(argv: list[str] | None = None) -> None:
     web.add_argument(
         "--data-source",
         dest="data_source",
-        choices=("stub", "yfinance", "edgar"),
+        choices=("stub", "yfinance", "edgar", "edgar-full"),
         default="stub",
         help="Price source for unrealized P&L (default: stub → no live prices)",
     )

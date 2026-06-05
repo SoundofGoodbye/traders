@@ -120,9 +120,10 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 - **Proposal:** add an EU-capable price source, **or** trim/label the watchlist so advertised = actual. Stretch: broaden to mid/small caps (where mispricing lives) — needs a better provider.
 - **Shipped:** slice 45 — `traders.universe` + `traders universe`: honest priceable-vs-skipped coverage from the symbol map; README states the gap. **Still open:** an EU-capable price source (the actual fix).
 
-### B12 — Researcher reads filing *content*, not just titles  · P2 · M/L
+### B12 — Researcher reads filing *content*, not just titles  · P2 · M/L  · ✅ shipped (slice 48)
 - **Problem:** `research.render_content` surfaces filing/news **titles + snippets only**; EDGAR bodies go unread. The LLM thesis is only as good as this thin note.
 - **Proposal:** pull and extract key sections (risk factors, MD&A, segment data) or full-text snippets for the Analyst/LLM to use.
+- **Shipped:** slice 48 — `traders.filing_text` (HTML→text + best-effort section extract) + `EdgarDataSource(document_fetcher=...)`; `--data-source edgar-full` enriches 10-K/10-Q snippets with a Risk-Factors/MD&A excerpt.
 
 ### B13 — A fundamentals provider you'd stake money on  · P2 · M  · ✅ shipped (slice 47)
 - **Problem:** yfinance is scraped/unofficial/fragile — fine for a hobby quote, not to underwrite a buy.

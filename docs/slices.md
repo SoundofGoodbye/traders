@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–47 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–48 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -465,6 +465,20 @@ the network (ticker→CIK then companyfacts) and hard-requires `TRADERS_EDGAR_UA
 exiting cleanly without it. No migration, no new dependency (stdlib urllib+json).
 This also makes B12's "richer data" point real for *numbers*; filing **prose** is
 still future.
+
+## Slice 48 — Researcher reads filing content, not just titles
+
+[Backlog](backlog.md) item **B12** — the EDGAR filing DataPoints carried only a
+headline ("AAPL filed 10-K on …"), so the note (and the LLM thesis that reads it)
+had no substance. `traders.filing_text` adds pure `extract_text` (HTML → clean
+text) and `extract_item` (best-effort section pull — prefers the body over the
+table of contents, stops at the next `Item N`). `EdgarDataSource` gains an optional
+`document_fetcher`; when set, a 10-K/10-Q snippet carries a real **Risk Factors /
+MD&A excerpt** instead of just the headline (8-K left as metadata; any fetch/parse
+error degrades silently to the headline). `make_data_source("edgar-full")` +
+`--data-source edgar-full` wire the real (UA-gated) document fetch end-to-end — the
+richer, slower research option. The extractors are hermetic (tested on canned
+HTML); only the fetch touches the network. No migration, no new dependency.
 
 ## Future
 

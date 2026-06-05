@@ -315,17 +315,31 @@ class EdgarDataSource:
     DEFAULT_FORMS: tuple[str, ...] = ("10-K", "10-Q", "8-K")
     DEFAULT_LIMIT: int = 5
 
+    # Forms whose body is worth excerpting (10-K/10-Q carry Risk Factors / MD&A;
+    # an 8-K is short and event-specific, so we leave its snippet as metadata).
+    _TEXT_FORMS: tuple[str, ...] = ("10-K", "10-Q")
+    _SECTION_LABELS: tuple[str, ...] = (
+        "Item 1A. Risk Factors",
+        "Risk Factors",
+        "Item 7. Management's Discussion and Analysis",
+        "Management's Discussion and Analysis",
+    )
+
     def __init__(
         self,
         filings_fn: Callable[[str], list[dict[str, Any]]] | None = None,
         forms: tuple[str, ...] | None = None,
         limit: int | None = None,
+        document_fetcher: Callable[[str], str] | None = None,
     ) -> None:
         if filings_fn is None:
             filings_fn = _default_edgar_fetcher()
         self._filings_fn = filings_fn
         self._forms = tuple(forms) if forms is not None else self.DEFAULT_FORMS
         self._limit = limit if limit is not None else self.DEFAULT_LIMIT
+        # When set (slice 48 / B12), 10-K/10-Q snippets carry a real section
+        # excerpt fetched from the primary document, not just the filing headline.
+        self._document_fetcher = document_fetcher
 
     def fetch(self, ticker: str) -> list[DataPoint]:
         try:
@@ -363,13 +377,60 @@ class EdgarDataSource:
         else:
             url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&company={ticker}"
         published = filing_date or date.today().isoformat()
+        snippet = f"{ticker} filed {form} on {published}."
+        excerpt = self._document_excerpt(form, url)
+        if excerpt:
+            snippet = f"{snippet} {excerpt}"
         return DataPoint(
             kind="filing",
             title=f"{ticker} {form}",
             url=url,
-            snippet=f"{ticker} filed {form} on {published}.",
+            snippet=snippet,
             published_at=published,
         )
+
+    def _document_excerpt(self, form: str, url: str) -> str | None:
+        """A Risk-Factors / MD&A excerpt from the primary document, or None.
+
+        Only when a ``document_fetcher`` is configured and the form is worth
+        excerpting; any fetch/parse error degrades silently to the metadata
+        snippet, honoring the no-data-is-not-an-exception contract.
+        """
+        if self._document_fetcher is None or form not in self._TEXT_FORMS or not url:
+            return None
+        try:
+            text = self._document_fetcher(url)
+        except Exception:
+            return None
+        from traders.filing_text import extract_item
+
+        return extract_item(text or "", *self._SECTION_LABELS)
+
+
+def _default_edgar_document_fetcher() -> Callable[[str], str]:
+    """Build the real primary-document fetcher (URL -> plain text), UA-gated.
+
+    Network only when called; reuses ``TRADERS_EDGAR_UA``. Strips the fetched
+    HTML to text via :func:`traders.filing_text.extract_text`.
+    """
+    import os
+    import urllib.request
+
+    ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
+    if not ua:
+        raise RuntimeError(
+            "TRADERS_EDGAR_UA env var is required for the EDGAR data source. "
+            "Set it to a real contact string (e.g. 'Acme Research user@acme.com')."
+        )
+
+    def fetch(url: str) -> str:
+        from traders.filing_text import extract_text
+
+        req = urllib.request.Request(url, headers={"User-Agent": ua})
+        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (vetted SEC URLs)
+            return extract_text(resp.read().decode("utf-8", "replace"))
+
+    return fetch
 
 
 def make_data_source(name: str) -> DataSource:
@@ -380,4 +441,9 @@ def make_data_source(name: str) -> DataSource:
         return YFinanceDataSource()
     if name == "edgar":
         return EdgarDataSource()
-    raise ValueError(f"unknown data source: {name!r} (expected 'stub', 'yfinance', or 'edgar')")
+    if name == "edgar-full":
+        # Like 'edgar', but enriches 10-K/10-Q snippets with a real section excerpt.
+        return EdgarDataSource(document_fetcher=_default_edgar_document_fetcher())
+    raise ValueError(
+        f"unknown data source: {name!r} (expected 'stub', 'yfinance', 'edgar', or 'edgar-full')"
+    )
