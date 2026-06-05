@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–40 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–41 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -377,6 +377,20 @@ nudge is gone); "Rejected" becomes "Set aside" (the discipline of *not* acting,
 made visible); and the Candidates table gains a "background, not recommendations"
 intro. Template/copy only — no data, route, or schema change; pairs with the
 slice-37/38 buy-list it now points to.
+
+## Slice 41 — Quality metrics: ROIC / ROE / margin trend
+
+[Backlog](backlog.md) item **B2 (remainder)** — the magnitudes a long-term owner
+weighs, complementing slice-34's binary Piotroski tests. `quality.QualityMetrics`
++ `quality_metrics(cur, prev)` / `quality_metrics_for(conn, ticker, as_of=...)`
+compute return on invested capital (net income / (equity + long-term debt) — a
+statement-only proxy, not tax-adjusted NOPAT), return on equity, and gross margin,
+each with its year-over-year delta, look-ahead-safe over the slice-33 series.
+Return ratios drop to `None` on a non-positive base (e.g. negative equity) rather
+than report a misleading number. Pure stdlib, no migration; compute + accessor now
+(surfacing/wiring is a follow-on, as Piotroski was in slice 34). **Deferred:**
+interest coverage and debt-maturity need an `interest_expense` line the slice-33
+schema doesn't carry yet.
 
 ## Future
 

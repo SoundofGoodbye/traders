@@ -5,13 +5,18 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from traders.db import apply_migrations
 from traders.fundamental_periods import FundamentalPeriod, save_periods
 from traders.quality import (
     PiotroskiScore,
+    QualityMetrics,
     piotroski_components,
     piotroski_for,
     piotroski_score,
+    quality_metrics,
+    quality_metrics_for,
 )
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
@@ -197,6 +202,97 @@ def test_piotroski_for_needs_two_periods():
     conn = _conn()
     save_periods(conn, [_fp("2024-12-31", available_at="2025-02-15", **_field_overrides(_CUR))])
     assert piotroski_for(conn, "AAA", as_of="2025-06-01") is None
+
+
+# ---- quality metrics: ROIC / ROE / gross-margin trend (slice 41 / B2) ------
+
+
+def test_quality_metrics_levels_and_deltas():
+    cur = _fp(
+        "2024-12-31",
+        net_income=120.0,
+        total_equity=900.0,
+        long_term_debt=300.0,
+        gross_profit=420.0,
+        revenue=1200.0,
+    )
+    prev = _fp(
+        "2023-12-31",
+        net_income=50.0,
+        total_equity=800.0,
+        long_term_debt=500.0,
+        gross_profit=300.0,
+        revenue=1000.0,
+    )
+    m = quality_metrics(cur, prev)
+    assert isinstance(m, QualityMetrics)
+    assert m.roe == pytest.approx(120.0 / 900.0)
+    assert m.roic == pytest.approx(120.0 / (900.0 + 300.0))  # net income / invested capital
+    assert m.gross_margin == pytest.approx(420.0 / 1200.0)
+    assert m.roe_delta == pytest.approx(120.0 / 900.0 - 50.0 / 800.0)
+    assert m.roic_delta == pytest.approx(120.0 / 1200.0 - 50.0 / 1300.0)
+    assert m.gross_margin_delta == pytest.approx(0.35 - 0.30)
+
+
+def test_quality_metrics_without_prior_has_no_deltas():
+    cur = _fp(
+        "2024-12-31", net_income=120.0, total_equity=900.0, gross_profit=420.0, revenue=1200.0
+    )
+    m = quality_metrics(cur)
+    assert m.roe is not None
+    assert m.roe_delta is None and m.roic_delta is None and m.gross_margin_delta is None
+
+
+def test_quality_metrics_non_positive_base_is_none():
+    # Negative equity -> ROE not meaningful; with no debt, invested capital is
+    # negative too -> ROIC not meaningful either.
+    cur = _fp("2024-12-31", net_income=120.0, total_equity=-50.0, long_term_debt=0.0)
+    m = quality_metrics(cur)
+    assert m.roe is None and m.roic is None
+
+
+def test_quality_metrics_for_uses_latest_pair():
+    conn = _conn()
+    save_periods(
+        conn,
+        [
+            _fp(
+                "2024-12-31",
+                available_at="2025-02-15",
+                net_income=120.0,
+                total_equity=900.0,
+                long_term_debt=300.0,
+                gross_profit=420.0,
+                revenue=1200.0,
+            ),
+            _fp(
+                "2023-12-31",
+                available_at="2024-02-15",
+                net_income=50.0,
+                total_equity=800.0,
+                long_term_debt=500.0,
+                gross_profit=300.0,
+                revenue=1000.0,
+            ),
+        ],
+    )
+    m = quality_metrics_for(conn, "AAA", as_of="2025-06-01")
+    assert m is not None and m.roe_delta is not None  # both periods visible
+
+
+def test_quality_metrics_for_single_period_has_levels_only():
+    conn = _conn()
+    save_periods(
+        conn,
+        [_fp("2024-12-31", available_at="2025-02-15", net_income=120.0, total_equity=900.0)],
+    )
+    m = quality_metrics_for(conn, "AAA", as_of="2025-06-01")
+    assert m is not None and m.roe is not None and m.roe_delta is None
+
+
+def test_quality_metrics_for_none_when_no_periods():
+    conn = _conn()
+    assert quality_metrics_for(conn, "AAA", as_of="2025-06-01") is None
 
 
 def _field_overrides(p: FundamentalPeriod) -> dict:

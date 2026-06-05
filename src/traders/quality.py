@@ -67,6 +67,18 @@ def _ratio(num: float | None, den: float | None) -> float | None:
     return num / den
 
 
+def _ratio_pos(num: float | None, den: float | None) -> float | None:
+    """``num / den`` requiring a strictly positive denominator (else None).
+
+    For return ratios (ROIC, ROE) a zero or negative base — e.g. negative equity
+    from accumulated losses — makes the ratio meaningless, so we drop it rather
+    than report a misleading number.
+    """
+    if num is None or den is None or den <= 0:
+        return None
+    return num / den
+
+
 def _roa(p: FundamentalPeriod) -> float | None:
     return _ratio(p.net_income, p.total_assets)
 
@@ -140,6 +152,89 @@ def piotroski_score(cur: FundamentalPeriod, prev: FundamentalPeriod) -> Piotrosk
         computable=len(present),
         components=components,
     )
+
+
+@dataclass(frozen=True)
+class QualityMetrics:
+    """Return-on-capital and margin *levels* plus their year-over-year change.
+
+    Complements the binary Piotroski tests with the magnitudes a long-term owner
+    actually weighs — how profitably the business compounds capital, and whether
+    that is improving. ``roic`` uses net income over invested capital (equity +
+    long-term debt) as a simple, statement-only proxy — not a tax-adjusted NOPAT
+    ROIC. Any field is ``None`` when its inputs are missing.
+    """
+
+    roic: float | None
+    roe: float | None
+    gross_margin: float | None
+    roic_delta: float | None
+    roe_delta: float | None
+    gross_margin_delta: float | None
+
+
+def _invested_capital(p: FundamentalPeriod) -> float | None:
+    """Equity + long-term debt (a statement-only invested-capital proxy)."""
+    if p.total_equity is None:
+        return None
+    debt = p.long_term_debt if p.long_term_debt is not None else 0.0
+    return p.total_equity + debt
+
+
+def _roic(p: FundamentalPeriod) -> float | None:
+    return _ratio_pos(p.net_income, _invested_capital(p))
+
+
+def _roe(p: FundamentalPeriod) -> float | None:
+    return _ratio_pos(p.net_income, p.total_equity)
+
+
+def _delta(cur: float | None, prev: float | None) -> float | None:
+    return None if cur is None or prev is None else cur - prev
+
+
+def quality_metrics(
+    cur: FundamentalPeriod, prev: FundamentalPeriod | None = None
+) -> QualityMetrics:
+    """ROIC / ROE / gross-margin levels for ``cur``, with deltas vs ``prev`` if given."""
+    roic, roe, gross_margin = _roic(cur), _roe(cur), _gross_margin(cur)
+    if prev is None:
+        return QualityMetrics(roic, roe, gross_margin, None, None, None)
+    return QualityMetrics(
+        roic,
+        roe,
+        gross_margin,
+        _delta(roic, _roic(prev)),
+        _delta(roe, _roe(prev)),
+        _delta(gross_margin, _gross_margin(prev)),
+    )
+
+
+def quality_metrics_for(
+    conn: sqlite3.Connection,
+    ticker: str,
+    *,
+    as_of: str,
+    annual_lag_days: int = ANNUAL_REPORTING_LAG_DAYS,
+    quarterly_lag_days: int = QUARTERLY_REPORTING_LAG_DAYS,
+) -> QualityMetrics | None:
+    """Quality metrics for ``ticker`` from the annual periods public as of ``as_of``.
+
+    Uses the latest period for levels and the one before it for deltas (look-ahead
+    -safe); ``None`` only when the ticker has no annual period yet.
+    """
+    periods = latest_periods(
+        conn,
+        ticker,
+        as_of=as_of,
+        period_type="annual",
+        limit=2,
+        annual_lag_days=annual_lag_days,
+        quarterly_lag_days=quarterly_lag_days,
+    )
+    if not periods:
+        return None
+    return quality_metrics(periods[0], periods[1] if len(periods) > 1 else None)
 
 
 def piotroski_for(

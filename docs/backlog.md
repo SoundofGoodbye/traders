@@ -45,7 +45,7 @@ This cluster turns "statistically cheap" into something defensible.
 - **Depends on:** — (extends slice 25).
 - **Shipped:** slice 33 — `traders.fundamental_periods` + migration `008`. Schema, idempotent store, look-ahead-safe as-of accessors (`load_periods_asof` / `latest_periods`, filing-date or reporting-lag gated), `ingest-fundamental-periods` CLI, hermetic tests. **Next:** B2 consumes it.
 
-### B2 — Quality / moat screen (ship the deferred Piotroski)  · P0 · M  · 🟡 Piotroski shipped (slice 34); ROIC/coverage open
+### B2 — Quality / moat screen (ship the deferred Piotroski)  · P0 · M  · 🟢 Piotroski (34) + ROIC/ROE/margin trend (41); interest coverage needs a schema field
 - **Problem:** "cheap" has no quality gate. Piotroski F-score is explicitly deferred (needs period-by-period statements).
 - **Proposal:** Piotroski F-score + ROIC/ROE trend, gross-margin stability, interest coverage / debt maturity. Add to `signals_lib`.
 - **Why:** separates cheap-and-good from cheap-and-melting. This is the #1 fix.
