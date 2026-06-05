@@ -598,6 +598,27 @@ def main(argv: list[str] | None = None) -> None:
         help="Seconds between requests (be polite to Yahoo; default: 1.0)",
     )
 
+    ingest_fp = sub.add_parser(
+        "ingest-fundamental-periods",
+        help="Fetch period-by-period statement history into the "
+        "fundamental_periods table (yfinance; needs the 'realdata' extra)",
+    )
+    ingest_fp.add_argument("--db", type=Path, default=None, help="SQLite DB path")
+    ingest_fp.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
+    ingest_fp.add_argument(
+        "--ticker",
+        action="append",
+        default=None,
+        metavar="SYM",
+        help="Ticker to ingest (repeatable; default: the whole watchlist)",
+    )
+    ingest_fp.add_argument(
+        "--delay",
+        type=float,
+        default=1.0,
+        help="Seconds between requests (be polite to Yahoo; default: 1.0)",
+    )
+
     eval_p = sub.add_parser(
         "eval-llm",
         help="Score the LLM generators against fixture cases "
@@ -1076,6 +1097,31 @@ def main(argv: list[str] | None = None) -> None:
         written = result["written"]
         skipped = result["skipped"]
         print(f"ingested fundamentals for {len(written)} ticker(s); {len(skipped)} skipped")
+        for ticker in written:
+            print(f"  {ticker}")
+        if skipped:
+            print(f"  skipped: {', '.join(skipped)}")
+        conn.close()
+        return
+
+    if args.cmd == "ingest-fundamental-periods":
+        from traders.fundamental_periods import ingest_fundamental_periods
+        from traders.scout import load_watchlist
+
+        conn = connect(args.db)
+        apply_migrations(conn)
+        tickers = args.ticker if args.ticker else load_watchlist(args.watchlist)
+        try:
+            result = ingest_fundamental_periods(conn, tickers, delay_s=args.delay)
+        except ImportError as e:
+            conn.close()
+            raise SystemExit(str(e)) from e
+        written = result["written"]
+        skipped = result["skipped"]
+        print(
+            f"ingested {result['periods']} period(s) across {len(written)} ticker(s); "
+            f"{len(skipped)} skipped"
+        )
         for ticker in written:
             print(f"  {ticker}")
         if skipped:

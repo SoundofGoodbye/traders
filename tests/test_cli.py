@@ -898,6 +898,64 @@ def test_cli_ingest_fundamentals_without_realdata_exits_cleanly(tmp_path):
     assert "realdata" in str(exc.value)
 
 
+# ---- ingest-fundamental-periods (slice 33) -------------------------------
+
+
+def test_cli_ingest_fundamental_periods_writes(tmp_path, capsys, monkeypatch):
+    # Patch the real yfinance statements fetcher with a canned one so the CLI
+    # path is hermetic.
+    import traders.fundamental_periods as fp
+
+    canned = [
+        {
+            "period_end": "2024-12-31",
+            "period_type": "annual",
+            "net_income": 100.0,
+            "total_assets": 2000.0,
+            "available_at": "2025-02-15",
+        },
+        {
+            "period_end": "2023-12-31",
+            "period_type": "annual",
+            "net_income": 90.0,
+            "total_assets": 1900.0,
+            "available_at": "2024-02-15",
+        },
+    ]
+    monkeypatch.setattr(fp, "_default_yf_statements_fetcher", lambda: lambda ticker: canned)
+    db = tmp_path / "t.db"
+    main(
+        [
+            "ingest-fundamental-periods",
+            "--db",
+            str(db),
+            "--ticker",
+            "AAA",
+            "--ticker",
+            "BBB",
+            "--delay",
+            "0",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert "ingested 4 period(s) across 2 ticker(s)" in out
+    conn = sqlite3.connect(db)
+    n = conn.execute("SELECT COUNT(*) FROM fundamental_periods").fetchone()[0]
+    conn.close()
+    assert n == 4
+
+
+def test_cli_ingest_fundamental_periods_without_realdata_exits_cleanly(tmp_path):
+    import importlib.util
+
+    if importlib.util.find_spec("yfinance") is not None:
+        pytest.skip("yfinance installed — the missing-extra path can't be exercised")
+    db = tmp_path / "t.db"
+    with pytest.raises(SystemExit) as exc:
+        main(["ingest-fundamental-periods", "--db", str(db), "--ticker", "AAA", "--delay", "0"])
+    assert "realdata" in str(exc.value)
+
+
 # ---- analyse --generator llm (slice 27) ----------------------------------
 
 

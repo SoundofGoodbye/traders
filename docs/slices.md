@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–32 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–33 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slice 33 (from the persona-review [backlog](backlog.md), item B1) adds period-by-period fundamentals ingestion. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -199,6 +199,35 @@ Stooq gated its free CSV endpoint (it now returns an apikey/captcha prompt inste
 ## Slice 32 — Job control in the web UI
 
 `traders.jobs` is the small control surface the cron wrappers and the UI share: a per-job **enabled** flag in `<data_dir>/jobs.json`, and **last-run** status parsed from `cron.log`. The runner scripts call `traders jobs check NAME` and skip when a job is off, so toggling in the UI stops the work **without editing the crontab** — no command execution from the browser. `traders jobs {status,enable,disable,check}` exposes the same on the CLI. A new `/jobs` page (CSRF-protected, like the feedback writes) lists each job's schedule, on/off state, last run + status, and a tail of `cron.log`, with a button to flip each job. The jobs config lives beside the db (so the UI and cron agree), keeping web tests hermetic. No migration; reuses the slice-11/13 web layer + `web` extra.
+
+## Slice 33 — Period-by-period fundamentals
+
+First step of [backlog](backlog.md) item **B1** and the foundation for the
+fundamental-depth cluster (B2 quality/Piotroski, B3 margin-of-safety) the
+persona review flagged as credibility-critical: the slice-25 `fundamentals` table
+is a single current `.info` snapshot stamped with an `as_of` date, which can't
+support a quality score or a true value case. `traders.fundamental_periods` +
+migration `008_fundamental_periods.sql` add a point-in-time **series** — one row
+per `(ticker, period_end, period_type, source)` holding the raw income /
+balance-sheet / cash-flow lines (revenue, gross profit, net income, operating cash
+flow, capex, total/current assets & liabilities, long-term debt, equity, shares)
+that Piotroski / ROIC / margin-trend / owner-earnings work needs.
+
+Mirrors the slice-25 shape exactly: a typed `FundamentalPeriod`, idempotent
+`save_periods` / `load_periods`, and `ingest_fundamental_periods` behind an
+injected `fetch_fn` (real impl = yfinance statements behind the `realdata` extra;
+tests inject canned per-period dicts, so the default suite stays hermetic and
+offline). **Look-ahead safety** (premortem guardrail #3) is built in from day one:
+a statement isn't public until it's *filed*, so each row carries an optional
+`available_at` filing date, and `availability_date` / `load_periods_asof` /
+`latest_periods` gate on filing date — falling back to a conservative
+`period_end` + reporting-lag estimate (90d annual / 45d quarterly) when no filing
+date is known — so a historical rebalance can't peek at a not-yet-filed period.
+Ratios are not stored (derived figures join the raw lines, and the `prices` close
+where a price is needed). `traders ingest-fundamental-periods`. Append-only
+migration; no new dependency (reuses `realdata`). The consuming quality/value
+signals are the next slices (B2/B4); this slice only ingests, stores, and exposes
+the look-ahead-safe series.
 
 ## Future
 
