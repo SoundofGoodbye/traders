@@ -72,12 +72,12 @@ This cluster turns "statistically cheap" into something defensible.
 The engine thinks in days/weeks (12-1 momentum, RSI, 20-day z, −8% stop); the
 persona thinks in years and businesses.
 
-### B5 — Buy-list with price triggers  · P1 · M  · 🟡 data + CLI shipped (slice 37); web page next
+### B5 — Buy-list with price triggers  · P1 · M  · ✅ shipped (slices 37 + 38)
 - **Problem:** the daily rotation (`scout.py`) nudges daily action; there's no "wait for my price."
 - **Proposal:** a user buy-list of names + target buy-below price; surface/alert when hit; de-emphasize daily candidate churn.
 - **Why:** flips the psychology from "what do I buy today" to "what am I waiting for" — the review's highest-leverage UX change.
 - **Depends on:** stands alone with manual targets; richer with B3.
-- **Shipped:** slice 37 — `traders.buylist` + migration `009`: a `buy_list` table (ticker, target buy-below, note), `set/remove/load/get`, and `evaluate` (triggered + distance vs the latest close, plus the slice-36 suggested buy-below). `traders buylist {set,remove,status}`. **Next:** the `/buy-list` web page (read view + add/update/remove forms, CSRF, plain-English triggered badges) — the user-facing surface.
+- **Shipped:** slice 37 — `traders.buylist` + migration `009`: a `buy_list` table (ticker, target buy-below, note), `set/remove/load/get`, and `evaluate` (triggered + distance vs the latest close, plus the slice-36 suggested buy-below). `traders buylist {set,remove,status}`. Slice 38 — the `/buy-list` web page: read view with plain-English "Ready"/"% to go" status + suggested buy-below, CSRF-guarded add/update/remove forms, new nav entry.
 
 ### B6 — Thesis-intact monitoring (business-level)  · P1 · M
 - **Problem:** exits are price/stop/time only; nothing checks whether the *reason to own* still holds.
@@ -148,11 +148,11 @@ the plain-English layer explaining it. The review's sharpest criticism is closed
 end-to-end.
 
 **Next — pick the thread:**
-- **B5 web page (recommended) — the `/buy-list` surface.** Slice 37 shipped the
-  data + CLI; the beginner lives in the web UI, so the read view + add/update/remove
-  forms (CSRF, plain-English "TRIGGERED" badges, the model's suggested buy-below) is
-  the payoff slice. Reuses the slice-11/13 web layer.
+- **B8/B9 (recommended) — the honesty-gap UI.** Cheap, high-trust, beginner-facing:
+  surface the snapshot/US-EOD caveats at the point of claim (B8), and reframe the
+  Today page to dampen the daily-action reflex now that the buy-list offers the
+  patient alternative (B9). Pairs naturally with the buy-list just shipped.
+- **B6 — thesis-intact monitoring** (business-level, not just price/stop) on the
+  slice-33 series.
 - **B2 remainder** — ROIC/ROE trend, interest coverage, debt-maturity on the
   slice-34 `quality` module.
-- **B8/B9** — the honesty-gap UI items (caveats at point of claim; reframe Today),
-  cheap and high-trust for a beginner.

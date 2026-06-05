@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–37 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slice 37 (item B5) adds a user buy-list with price triggers. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–38 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -334,6 +334,20 @@ own **suggested buy-below** as a sanity check against a self-chosen target.
 `traders buylist {set,remove,status}`. This slice is the data + CLI foundation;
 the `/buy-list` web page (the surface the beginner actually lives in) is the next
 slice. No migration beyond 009, no new dependency; hermetic tests.
+
+## Slice 38 — Buy-list web page
+
+[Backlog](backlog.md) item **B5** completed: the `/buy-list` surface the beginner
+actually lives in, over the slice-37 data layer. A read view lists each target vs
+the latest close with a plain-English status — **Ready — at/under your price**
+(green) when the price has come to you, or **+X% to go** otherwise — plus the
+model's suggested buy-below (slice-36 intrinsic value) as a sanity check, and the
+target's note. CSRF-guarded forms add/update a target and remove one, routing
+through `traders.buylist` (its own user-data write path, like the slice-32 jobs
+toggle — never the agent tables). A "How to read this page" explainer frames it as
+*wait for your price*, not an order. New nav entry; reuses the slice-11/13 web
+layer + `web` extra. No migration, no new dependency; web tests `importorskip`
+FastAPI so the default suite stays hermetic.
 
 ## Future
 

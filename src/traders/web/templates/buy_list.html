@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% set active = 'buylist' %}
+{% block title %}Buy-list — traders{% endblock %}
+{% block content %}
+  <h1>Buy-list</h1>
+  <div class="explain">
+    <p class="explain-label">How to read this page</p>
+    <p class="lead">Each row is a business you'd be happy to own — and the most you'd pay for it
+      (<b>your target</b>). When the latest price falls to or below your target, the row turns
+      <b>Ready</b>: that's your cue to do your homework and decide. It is never an order.</p>
+    <p class="sell">Adding a name here is a reminder to <b>wait for your price</b> instead of
+      reacting to the daily list. <b>Model buy-below</b> is this app's own rough estimate of a
+      sensible buy price (from the company's cash earnings) — a sanity check on your target,
+      not a recommendation.</p>
+  </div>
+
+  <h2>Add or update a target</h2>
+  <div class="card">
+    <form class="actions" method="post" action="/buy-list/set">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="text" name="ticker" placeholder="ticker (e.g. AAPL)" required>
+      <input type="number" name="target_price" step="0.01" min="0" placeholder="buy at/under" required>
+      <input type="text" name="note" placeholder="note (optional)">
+      <button type="submit">Save</button>
+    </form>
+    <p class="meta">Use the exact ticker symbol as it appears in your watchlist (e.g. AAPL, MC.PA).</p>
+  </div>
+
+  <h2>Your targets</h2>
+  {% if rows %}
+    <table>
+      <thead><tr>
+        <th>Ticker</th><th class="num">Your target</th><th class="num">Price now</th>
+        <th>Status</th><th class="num">Model<br><span class="meta">buy-below</span></th><th>Remove</th>
+      </tr></thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td>
+              <span class="ticker">{{ r.target.ticker }}</span>
+              {% if r.target.note %}<div class="meta">{{ r.target.note }}</div>{% endif %}
+            </td>
+            <td class="num">{{ "%.2f"|format(r.target.target_price) }}</td>
+            <td class="num">
+              {% if r.latest_price is not none %}{{ "%.2f"|format(r.latest_price) }}
+                <div class="meta">{{ r.latest_day }}</div>
+              {% else %}—{% endif %}
+            </td>
+            <td>
+              {% if r.latest_price is none %}
+                <span class="empty">no price yet</span>
+              {% elif r.triggered %}
+                <span class="tag long">Ready — at/under your price</span>
+              {% else %}
+                <span class="meta">{{ "%+.1f"|format(r.distance_pct) }}% to go</span>
+              {% endif %}
+            </td>
+            <td class="num">
+              {{ "%.2f"|format(r.suggested_buy_below) if r.suggested_buy_below is not none else "—" }}
+            </td>
+            <td>
+              <form class="actions" method="post" action="/buy-list/remove">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="ticker" value="{{ r.target.ticker }}">
+                <button type="submit" class="ghost">Remove</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="empty">No targets yet. Add a business you'd buy at the right price above.</p>
+  {% endif %}
+{% endblock %}

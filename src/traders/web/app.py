@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import sqlite3
 from collections.abc import Callable, Iterator
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +25,11 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from traders import feedback, jobs
+from traders import buylist, feedback, jobs
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
+from traders.prices import load_history_from_db
+from traders.valuation import valuations_asof
 from traders.web import csrf, explain, queries
 from traders.web.prices import PriceFn
 
@@ -245,6 +248,13 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             },
         )
 
+    @app.get("/buy-list", response_class=HTMLResponse)
+    def buy_list_page(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> Any:
+        history = load_history_from_db(conn)
+        valuation = valuations_asof(conn, history, as_of=date.today())
+        rows = buylist.evaluate(conn, history=history, valuation=valuation)
+        return render_with_csrf(request, "buy_list.html", {"rows": rows})
+
     # --- write actions (slice 13) -------------------------------------------
     # POST handlers call the existing traders.feedback functions directly, so
     # there is no parallel write path into `positions`. They are async and open
@@ -305,5 +315,37 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
             raise HTTPException(status_code=404, detail=f"no job {name}")
         jobs.set_enabled(name, not jobs.is_enabled(name, jobs_data_dir), jobs_data_dir)
         return redirect("/jobs")
+
+    @app.post("/buy-list/set")
+    async def post_buylist_set(request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        ticker = str(form.get("ticker") or "").strip()
+        if not ticker:
+            raise HTTPException(status_code=400, detail="missing ticker")
+        target = form_float(form.get("target_price"), "target_price")
+        note = form.get("note") or None
+        conn = connect(db_path)
+        try:
+            buylist.set_target(conn, ticker, target, note=note if isinstance(note, str) else None)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        finally:
+            conn.close()
+        return redirect("/buy-list")
+
+    @app.post("/buy-list/remove")
+    async def post_buylist_remove(request: Request) -> Any:
+        await check_csrf(request)
+        form = await request.form()
+        ticker = str(form.get("ticker") or "").strip()
+        if not ticker:
+            raise HTTPException(status_code=400, detail="missing ticker")
+        conn = connect(db_path)
+        try:
+            buylist.remove_target(conn, ticker)
+        finally:
+            conn.close()
+        return redirect("/buy-list")
 
     return app

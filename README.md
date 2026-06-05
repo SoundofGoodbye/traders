@@ -135,7 +135,7 @@ uv run traders web --db data/traders.db            # http://127.0.0.1:8420
 uv run traders web --data-source yfinance          # live prices → unrealized P&L
 ```
 
-- `/` Today (latest PM picks + candidates), `/positions`, `/theses` (filterable) → `/theses/{id}`, `/reviews`, `/jobs`.
+- `/` Today (latest PM picks + candidates), `/positions`, `/buy-list`, `/theses` (filterable) → `/theses/{id}`, `/reviews`, `/jobs`.
 - The positions and thesis-detail pages report fills/partials/skips/sells; these call the same `traders.feedback` path as the CLI, behind a per-session CSRF token. Read-only everywhere else.
 - `/jobs` shows the scheduled cron jobs (schedule, on/off, last run + status, recent log) and lets you toggle each on/off (CSRF-protected). Toggling flips a flag the cron wrappers honor — it never edits the crontab or runs commands from the browser. Same control on the CLI: `traders jobs {status,enable,disable}`.
 - Binds to `127.0.0.1` (local only). The CLI feedback path keeps working unchanged.
@@ -172,8 +172,8 @@ uv run traders buylist remove --ticker AAPL
 `status` flags each name `TRIGGERED` when the latest close is at/under your target,
 shows how far it still has to fall otherwise, and — once `ingest-fundamental-periods`
 has run — prints the model's own suggested buy-below (the slice-36 intrinsic-value
-estimate) as a sanity check against your target. A `/buy-list` web page is on the
-roadmap.
+estimate) as a sanity check against your target. The web UI's **Buy-list** tab
+presents the same with add/update/remove forms and a plain-English "Ready" badge.
 
 ## Current limitations
 
