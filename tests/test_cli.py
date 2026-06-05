@@ -1039,6 +1039,58 @@ def test_cli_buylist_set_and_status(tmp_path, capsys):
     assert "AAA" in out and "TRIGGERED" in out
 
 
+def test_cli_capital_allocation(capsys, monkeypatch):
+    import traders.edgar_fundamentals as ef
+
+    facts = {
+        "facts": {
+            "us-gaap": {
+                "PaymentsForRepurchaseOfCommonStock": {
+                    "units": {
+                        "USD": [
+                            {
+                                "start": "2023-01-01",
+                                "end": "2023-12-31",
+                                "val": 800,
+                                "form": "10-K",
+                                "filed": "2024-02-15",
+                            }
+                        ]
+                    }
+                },
+                "NetIncomeLoss": {
+                    "units": {
+                        "USD": [
+                            {
+                                "start": "2023-01-01",
+                                "end": "2023-12-31",
+                                "val": 1000,
+                                "form": "10-K",
+                                "filed": "2024-02-15",
+                            }
+                        ]
+                    }
+                },
+            }
+        }
+    }
+    monkeypatch.setattr(ef, "companyfacts_fetcher", lambda: lambda ticker: facts)
+    main(["capital-allocation", "--ticker", "AAPL"])
+    out = capsys.readouterr().out
+    assert "capital allocation" in out
+    assert "Returns cash to shareholders" in out
+
+
+def test_cli_capital_allocation_without_ua_exits_cleanly(tmp_path, monkeypatch):
+    import traders.cli as cli
+
+    monkeypatch.setattr(cli, "load_dotenv", lambda *a, **k: None)
+    monkeypatch.delenv("TRADERS_EDGAR_UA", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        main(["capital-allocation", "--ticker", "AAPL"])
+    assert "TRADERS_EDGAR_UA" in str(exc.value)
+
+
 def test_cli_exposure_no_positions(tmp_path, capsys):
     main(["exposure", "--db", str(tmp_path / "t.db")])
     assert "No open positions" in capsys.readouterr().out

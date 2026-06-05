@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–48 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–49 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -479,6 +479,19 @@ error degrades silently to the headline). `make_data_source("edgar-full")` +
 `--data-source edgar-full` wire the real (UA-gated) document fetch end-to-end — the
 richer, slower research option. The extractors are hermetic (tested on canned
 HTML); only the fetch touches the network. No migration, no new dependency.
+
+## Slice 49 — Capital-allocation signals (buybacks, dividends, dilution)
+
+[Backlog](backlog.md) item **B15** — how management deploys cash is core to
+owner-mindset judgment, and it's in the official filings.
+`traders.capital_allocation.capital_allocation_from_facts` reads the slice-47 EDGAR
+companyfacts (buybacks, dividends, net income, share count) and summarizes the
+recent record — total cash returned, payout ratio, and whether the share count is
+*shrinking* (buybacks compounding per-share value) or *growing* (dilution) — in
+plain English. `traders capital-allocation --ticker X` surfaces it (the raw
+companyfacts fetch was factored out of slice 47 and shared). Pure analyzer (tested
+on canned facts); only the fetch touches the network. Insider buying (Form 4 XML)
+stays deferred. No migration, no new dependency.
 
 ## Future
 

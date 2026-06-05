@@ -125,11 +125,13 @@ def companyfacts_to_periods(companyfacts: dict[str, Any]) -> list[dict[str, Any]
     return periods
 
 
-def _default_edgar_facts_fetcher() -> Callable[[str], list[dict[str, Any]]]:
-    """Build the real EDGAR companyfacts fetcher (ticker -> normalized periods).
+def companyfacts_fetcher() -> Callable[[str], dict[str, Any]]:
+    """Build the raw EDGAR companyfacts fetcher (ticker -> companyfacts dict).
 
     Network only when called; hard-requires ``TRADERS_EDGAR_UA`` (SEC blocks
     anonymous traffic). The ticker→CIK map is fetched once and cached in closure.
+    Returns ``{}`` for an unknown ticker or any fetch error. Shared by the periods
+    ingestor and the capital-allocation analysis (slice 49).
     """
     ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
     if not ua:
@@ -144,7 +146,7 @@ def _default_edgar_facts_fetcher() -> Callable[[str], list[dict[str, Any]]]:
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 (vetted SEC URLs)
             return json.loads(resp.read().decode())
 
-    def fetch(ticker: str) -> list[dict[str, Any]]:
+    def fetch(ticker: str) -> dict[str, Any]:
         if not cik_map:
             payload = _get_json("https://www.sec.gov/files/company_tickers.json")
             for entry in payload.values():
@@ -153,11 +155,16 @@ def _default_edgar_facts_fetcher() -> Callable[[str], list[dict[str, Any]]]:
                     cik_map[str(sym).upper()] = str(cik).zfill(10)
         cik = cik_map.get(ticker.upper())
         if cik is None:
-            return []
+            return {}
         try:
-            facts = _get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json")
+            return _get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json")
         except Exception:
-            return []
-        return companyfacts_to_periods(facts)
+            return {}
 
     return fetch
+
+
+def _default_edgar_facts_fetcher() -> Callable[[str], list[dict[str, Any]]]:
+    """The periods fetcher: raw companyfacts mapped to normalized period dicts."""
+    raw = companyfacts_fetcher()
+    return lambda ticker: companyfacts_to_periods(raw(ticker))

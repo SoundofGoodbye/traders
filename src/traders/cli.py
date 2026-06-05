@@ -371,6 +371,12 @@ def main(argv: list[str] | None = None) -> None:
         help="Price source whose coverage to check (default: tiingo)",
     )
 
+    capalloc_p = sub.add_parser(
+        "capital-allocation",
+        help="A company's capital-allocation record from SEC EDGAR (needs TRADERS_EDGAR_UA)",
+    )
+    capalloc_p.add_argument("--ticker", required=True, help="Ticker to look up")
+
     exposure_p = sub.add_parser(
         "exposure", help="Concentration + hidden correlation across your open positions"
     )
@@ -1011,6 +1017,31 @@ def main(argv: list[str] | None = None) -> None:
         )
         if report.skipped:
             print(f"  skipped: {', '.join(report.skipped)}")
+        return
+
+    if args.cmd == "capital-allocation":
+        from traders.capital_allocation import capital_allocation_from_facts
+        from traders.edgar_fundamentals import companyfacts_fetcher
+
+        try:
+            fetch = companyfacts_fetcher()
+        except RuntimeError as e:
+            raise SystemExit(str(e)) from e
+        ca = capital_allocation_from_facts(fetch(args.ticker))
+        if ca is None:
+            print(f"No capital-allocation data for {args.ticker}.")
+            return
+        print(f"{args.ticker} — capital allocation over {ca.years} year(s):")
+        print(
+            f"  buybacks {ca.total_buybacks:,.0f} · dividends {ca.total_dividends:,.0f} · "
+            f"returned {ca.total_returned:,.0f}"
+        )
+        if ca.payout_ratio is not None:
+            print(f"  payout ratio (returned / net income): {ca.payout_ratio * 100:.0f}%")
+        if ca.share_change_pct is not None:
+            print(f"  share count change over the window: {ca.share_change_pct:+.0f}%")
+        for note in ca.notes:
+            print(f"  • {note}")
         return
 
     if args.cmd == "exposure":

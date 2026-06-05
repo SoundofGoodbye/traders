@@ -139,10 +139,11 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 - **Proposal:** sector weights, pairwise correlation/cluster, single-name concentration on a portfolio/Positions surface.
 - **Shipped:** slice 46 — `traders.exposure` + `traders exposure`: concentration (largest/top-3/Herfindahl) and lockstep-correlated pairs over open positions. **Still open:** sector weights (needs per-ticker sector data) and a web surface.
 
-### B15 — Capital allocation & insider signals  · P2 · M
+### B15 — Capital allocation & insider signals  · P2 · M  · 🟡 capital allocation shipped (slice 49); insider (Form 4) deferred
 - **Problem:** no view of buybacks, dividend history, insider buying, or capital-allocation track record — core to owner-mindset judgment.
 - **Proposal:** ingest + surface per name in research.
 - **Depends on:** B1 / data.
+- **Shipped:** slice 49 — `traders.capital_allocation` + `traders capital-allocation`: buybacks, dividends, payout ratio, and share-count trend (dilution vs buybacks) from EDGAR companyfacts. **Deferred:** insider buying (Form 4 XML, a separate heavier feed).
 
 ---
 
@@ -155,15 +156,8 @@ margin of safety to intrinsic value*, with margin of safety driving conviction a
 the plain-English layer explaining it. The review's sharpest criticism is closed
 end-to-end.
 
-**Next — pick the thread:**
-- **B6 (recommended) — thesis-intact monitoring.** Check whether the *reason* to
-  own still holds (earnings still growing, margin not collapsing, no debt event) at
-  the business level, not just price vs stop — reads the slice-33 series already in
-  place. The review's "is the thesis still intact?" point.
-- **B10 — conviction that means something.** Fold quality/margin-of-safety into the
-  momentum/mean-reversion convictions too (value already does), or relabel the raw
-  signal-magnitude ones honestly.
-- **B2 remainder** — ROIC/ROE trend, interest coverage on the slice-34 `quality`
-  module.
-- **B11–B15** — data breadth (EU universe, filing content, real fundamentals
-  provider) and portfolio-level views (exposure, capital allocation).
+**Status: every persona-review backlog item is shipped (slices 33–49).** The
+remaining deferrals are explicitly data-bound and noted inline: an EU-capable price
+source (B11), a sector data feed for sector exposure (B14), interest-coverage /
+debt-maturity fields (B2), and insider Form-4 parsing (B15). Each is a clean future
+data slice on the patterns now in place.
