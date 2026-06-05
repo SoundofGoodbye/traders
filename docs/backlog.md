@@ -104,7 +104,7 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 - **Proposal:** lead with "no action unless it meets your plan"; split "for your homework" from "act now"; lower the urgency while keeping plain English.
 - **Shipped:** slice 40 — "How to use this page" box (ideas to research, not orders; most days do nothing; wait via the Buy-list); "PM picks" → "Ideas to research"; "Rejected" → "Set aside"; softened CTA; Candidates intro. Template/copy only.
 
-### B10 — Conviction that means something  · P1 · S
+### B10 — Conviction that means something  · P1 · S  · ✅ shipped (slice 42)
 - **Problem:** conviction is mechanical (e.g. momentum ≥25% → 5). It implies judgment it doesn't have.
 - **Proposal:** fold quality/margin-of-safety into conviction **or** relabel the field "signal strength" to stop overclaiming.
 - **Depends on:** richer version needs B2/B3.

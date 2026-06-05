@@ -477,6 +477,49 @@ def test_build_signal_generator_vetoes_when_no_margin_of_safety():
     assert build_signal_generator(conn, as_of=as_of).generate("AAA", "") == []
 
 
+def test_momentum_conviction_capped_on_weak_quality():
+    # A strong 1%/day uptrend would score conviction 5, but a confirmed weak
+    # balance sheet caps it (B10) — conviction reflects the business, not the move.
+    closes = [100.0 * (1.01**i) for i in range(260)]
+    d = _gen(
+        "AAA",
+        closes,
+        quality={"AAA": PiotroskiScore(score=2, computable=9, components={})},
+    ).generate("AAA", "")[0]
+    assert d.thesis_type == "momentum"
+    assert d.conviction == 2  # capped from 5
+    assert "Weak balance sheet" in d.rationale
+
+
+def test_momentum_conviction_unchanged_on_sound_quality():
+    closes = [100.0 * (1.01**i) for i in range(260)]
+    d = _gen(
+        "AAA",
+        closes,
+        quality={"AAA": PiotroskiScore(score=8, computable=9, components={})},
+    ).generate("AAA", "")[0]
+    assert d.conviction == 5  # sound quality -> full conviction
+    assert "Weak balance sheet" not in d.rationale
+
+
+def test_momentum_conviction_unchanged_without_quality():
+    closes = [100.0 * (1.01**i) for i in range(260)]
+    d = _gen("AAA", closes).generate("AAA", "")[0]
+    assert d.conviction == 5  # additive: no quality map -> unchanged
+
+
+def test_mean_reversion_conviction_capped_on_weak_quality():
+    closes = [100.0 - i for i in range(60)]  # oversold
+    d = _gen(
+        "AAA",
+        closes,
+        quality={"AAA": PiotroskiScore(score=1, computable=9, components={})},
+    ).generate("AAA", "")[0]
+    assert d.thesis_type == "mean-reversion"
+    assert d.conviction == 2
+    assert "Weak balance sheet" in d.rationale
+
+
 def test_build_signal_generator_value_with_margin_of_safety():
     conn = _conn()
     closes = [100.0] * 100

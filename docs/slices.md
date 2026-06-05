@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–41 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–42 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -391,6 +391,17 @@ than report a misleading number. Pure stdlib, no migration; compute + accessor n
 (surfacing/wiring is a follow-on, as Piotroski was in slice 34). **Deferred:**
 interest coverage and debt-maturity need an `interest_expense` line the slice-33
 schema doesn't carry yet.
+
+## Slice 42 — Conviction that reflects the business (price signals)
+
+[Backlog](backlog.md) item **B10** — conviction shouldn't be raw signal magnitude.
+The value thesis already derives conviction from margin of safety; this extends the
+`quality` map to the *price* signals: a momentum or mean-reversion long on a
+company with a confirmed weak Piotroski F-score has its conviction **capped**
+(default 2) — a big price move on a shaky balance sheet no longer reads as high
+conviction — and the rationale says why ("Weak balance sheet (Piotroski N/9) —
+conviction capped"). Additive by construction: with no `quality` map (backtests,
+default tests) behaviour is byte-identical. No migration, no new dependency.
 
 ## Future
 

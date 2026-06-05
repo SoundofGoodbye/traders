@@ -32,7 +32,13 @@ intrinsic value / margin of safety from :mod:`traders.valuation`). A cheap, soun
 name trading without a margin of safety to intrinsic value is vetoed, and when an
 estimate is present margin of safety — not flag count — drives the value thesis's
 conviction (quality can still nudge it up by one). Also additive: no ``valuation``
-=> slice-35 behaviour. PEAD/SUE (needs consensus estimates) remains deferred.
+=> slice-35 behaviour.
+
+Slice 42 (B10) extends the ``quality`` map to the *price* signals: a momentum or
+mean-reversion long on a confirmed-weak-quality company has its conviction capped,
+so a big price move on a shaky business no longer reads as high conviction. Still
+additive (no ``quality`` => unchanged). PEAD/SUE (needs consensus estimates)
+remains deferred.
 """
 
 from __future__ import annotations
@@ -115,6 +121,11 @@ class SignalThesisGenerator:
     # drives the value thesis's conviction when an estimate is available.
     valuation: dict[str, IntrinsicValue] | None = None
     min_margin_of_safety: float = DEFAULT_MIN_MARGIN_OF_SAFETY  # gate: need >= this MoS
+    # Slice 42 (B10) — fold quality into the price-signal convictions: a strong
+    # momentum / mean-reversion signal on a financially weak company (confirmed low
+    # Piotroski) is capped, so conviction reflects the business, not just the size
+    # of the price move. Additive: no `quality` => unchanged.
+    weak_quality_conviction_cap: int = 2
 
     def generate(self, ticker: str, content: str) -> list[DraftThesis]:
         closes = closes_before(self.history, ticker, self.as_of)
@@ -129,16 +140,17 @@ class SignalThesisGenerator:
         note = self._earnings_note(ticker)
 
         if mom is not None and mom >= self.momentum_threshold_pct:
+            conviction, qnote = self._quality_modulate(ticker, self._momentum_conviction(mom))
             return [
                 DraftThesis(
                     thesis_type="momentum",
                     direction="long",
-                    conviction=self._momentum_conviction(mom),
+                    conviction=conviction,
                     suggested_size_pct=size,
                     exit_condition=f"Exit on 12-1 momentum turning negative or {_STOP}.",
                     rationale=(
                         f"[signal] 12-1 momentum {mom:+.1f}% (RSI {_fmt(r)}); "
-                        f"trend-continuation long.{note}"
+                        f"trend-continuation long.{note}{qnote}"
                     ),
                 )
             ]
@@ -151,22 +163,39 @@ class SignalThesisGenerator:
             r is not None and r <= self.oversold_rsi
         )
         if oversold:
+            conviction, qnote = self._quality_modulate(ticker, self._meanrev_conviction(mr, r))
             return [
                 DraftThesis(
                     thesis_type="mean-reversion",
                     direction="long",
-                    conviction=self._meanrev_conviction(mr, r),
+                    conviction=conviction,
                     suggested_size_pct=size,
                     exit_condition=(
                         f"Exit when price reverts to its 20-day mean (z>=0) or {_STOP}."
                     ),
                     rationale=(
                         f"[signal] oversold: 20-day z {_fmt(mr)}, RSI {_fmt(r)}; "
-                        f"mean-reversion bounce long.{note}"
+                        f"mean-reversion bounce long.{note}{qnote}"
                     ),
                 )
             ]
         return []
+
+    def _quality_modulate(self, ticker: str, base_conviction: int) -> tuple[int, str]:
+        """Cap a price-signal conviction when the company's quality is confirmed weak.
+
+        A momentum or mean-reversion long on a name with a confirmed low Piotroski
+        F-score is a strong *price* signal on a shaky *business* — so cap its
+        conviction (and say why). Unknown or sufficient quality leaves it unchanged,
+        keeping the price-only path additive (no ``quality`` map => byte-identical).
+        """
+        q = self.quality.get(ticker) if self.quality else None
+        if q is None or q.computable < self.min_piotroski_computable:
+            return base_conviction, ""
+        if q.score < self.min_piotroski_score:
+            capped = min(base_conviction, self.weak_quality_conviction_cap)
+            return capped, f" Weak balance sheet (Piotroski {q.score}/9) — conviction capped."
+        return base_conviction, ""
 
     def _value_thesis(
         self, ticker: str, price: float, size: float, note: str
