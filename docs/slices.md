@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–44 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–45 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slices 39–40 (items B8, B9) surface honest data caveats at the point of claim and reframe the Today page to dampen the daily-action reflex. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -425,6 +425,19 @@ construction is unaffected), the scorecard renders "avg holding period: N days" 
 a standing note that **returns are total return — dividends are included via
 adjusted closes** (Tiingo `adjClose`), and the Positions page shows "held N days"
 on each closed trade. Pure additions; no migration, no new dependency.
+
+## Slice 45 — Universe coverage honesty
+
+[Backlog](backlog.md) item **B11** — the watchlist advertises S&P 100 + EuroStoxx
+50, but the free price tiers are US end-of-day only, so every foreign-venue ticker
+is *silently* skipped at ingest (the default watchlist: 100 priceable, all 50
+EuroStoxx names skipped). `traders.universe.classify` splits a watchlist into
+priceable vs skipped using the price source's symbol map (no network / token —
+reading the map, not building a fetcher), and `traders universe [--source]` prints
+the honest coverage and names the skipped tickers. The README's Prices section now
+states the gap and points at the command. The *fix* (an EU-capable price source)
+stays a future data slice; this closes the dishonest-advertising half. No
+migration, no new dependency.
 
 ## Future
 

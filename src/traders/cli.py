@@ -360,6 +360,17 @@ def main(argv: list[str] | None = None) -> None:
     bl_remove.add_argument("--ticker", required=True)
     buylist_sub.add_parser("status", help="Show targets vs the latest price (which are triggered)")
 
+    universe_p = sub.add_parser(
+        "universe", help="Show which watchlist names are actually priceable (vs skipped)"
+    )
+    universe_p.add_argument("--watchlist", type=Path, default=None, help="Watchlist JSON path")
+    universe_p.add_argument(
+        "--source",
+        choices=("tiingo", "stooq"),
+        default="tiingo",
+        help="Price source whose coverage to check (default: tiingo)",
+    )
+
     metrics_p = sub.add_parser("metrics", help="Score realized results against the strategy goal")
     metrics_p.add_argument("--db", type=Path, default=None, help="SQLite DB path")
     metrics_p.add_argument(
@@ -969,6 +980,19 @@ def main(argv: list[str] | None = None) -> None:
                 f"now {price} [{flag}]{suggested}"
             )
         conn.close()
+        return
+
+    if args.cmd == "universe":
+        from traders.universe import classify_watchlist
+
+        report = classify_watchlist(args.watchlist, source=args.source)
+        print(
+            f"Universe ({report.source}): {report.total} tickers — "
+            f"{len(report.priceable)} priceable, {len(report.skipped)} skipped "
+            f"(foreign venues are not on the free US tier)."
+        )
+        if report.skipped:
+            print(f"  skipped: {', '.join(report.skipped)}")
         return
 
     if args.cmd == "metrics":

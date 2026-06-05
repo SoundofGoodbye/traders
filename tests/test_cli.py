@@ -974,6 +974,15 @@ def test_cli_buylist_set_and_status(tmp_path, capsys):
     assert "AAA" in out and "TRIGGERED" in out
 
 
+def test_cli_universe_reports_coverage(tmp_path, capsys):
+    wl = tmp_path / "wl.json"
+    wl.write_text(json.dumps({"sp100": ["AAPL"], "eurostoxx50": ["MC.PA"]}))
+    main(["universe", "--watchlist", str(wl)])
+    out = capsys.readouterr().out
+    assert "2 tickers" in out and "1 priceable" in out and "1 skipped" in out
+    assert "MC.PA" in out  # the skipped foreign venue is named
+
+
 def test_cli_buylist_remove(tmp_path, capsys):
     db = tmp_path / "t.db"
     main(["buylist", "--db", str(db), "set", "--ticker", "AAA", "--target", "100"])

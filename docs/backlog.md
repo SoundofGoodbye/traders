@@ -115,9 +115,10 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 
 ## P2 — Data sources & breadth
 
-### B11 — Fix or stop advertising the EU universe  · P2 · S–L
+### B11 — Fix or stop advertising the EU universe  · P2 · S–L  · 🟡 honest labeling shipped (slice 45); EU price source still open
 - **Problem:** watchlist advertises S&P 100 + EuroStoxx 50, but Tiingo's free tier skips foreign venues → ~40 US names actually traded. `OPERATING.md` admits it; the watchlist doesn't.
 - **Proposal:** add an EU-capable price source, **or** trim/label the watchlist so advertised = actual. Stretch: broaden to mid/small caps (where mispricing lives) — needs a better provider.
+- **Shipped:** slice 45 — `traders.universe` + `traders universe`: honest priceable-vs-skipped coverage from the symbol map; README states the gap. **Still open:** an EU-capable price source (the actual fix).
 
 ### B12 — Researcher reads filing *content*, not just titles  · P2 · M/L
 - **Problem:** `research.render_content` surfaces filing/news **titles + snippets only**; EDGAR bodies go unread. The LLM thesis is only as good as this thin note.

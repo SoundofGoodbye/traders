@@ -106,7 +106,7 @@ uv run traders ingest-prices --source stooq         # Stooq fallback (free CSV, 
 uv run traders ingest-prices --ticker AAPL --ticker MSFT --since 2022-01-01
 ```
 
-Tiingo is the default: clean, split/dividend-adjusted daily closes (the right input for return-based signals), 30+ years of history, ~50 symbols/hour on the free tier. It needs `TIINGO_API_KEY` and fails fast with a clear message if it's unset; the network call is stdlib-only (no extra). Its free tier is US EOD, so foreign-venue tickers (`.PA`, `.DE`, …) are skipped. Stooq remains available via `--source stooq` but now requires an apikey upstream.
+Tiingo is the default: clean, split/dividend-adjusted daily closes (the right input for return-based signals), 30+ years of history, ~50 symbols/hour on the free tier. It needs `TIINGO_API_KEY` and fails fast with a clear message if it's unset; the network call is stdlib-only (no extra). Its free tier is US EOD, so foreign-venue tickers (`.PA`, `.DE`, …) are skipped — the default watchlist's entire EuroStoxx 50 is uncovered on the free tier. Run `traders universe` to see exactly which names are priced vs skipped; covering the EU names needs an EU-capable price source. Stooq remains available via `--source stooq` but now requires an apikey upstream.
 
 ## LLM theses
 
