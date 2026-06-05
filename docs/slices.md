@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–38 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page. The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–39 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction; slices 37–38 (item B5) add a user buy-list with price triggers and its `/buy-list` web page; slice 39 (item B8) surfaces honest data caveats at the point of claim. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -348,6 +348,21 @@ toggle — never the agent tables). A "How to read this page" explainer frames i
 *wait for your price*, not an order. New nav entry; reuses the slice-11/13 web
 layer + `web` extra. No migration, no new dependency; web tests `importorskip`
 FastAPI so the default suite stays hermetic.
+
+## Slice 39 — Honest caveats at the point of claim
+
+[Backlog](backlog.md) item **B8**: the code's honesty (snapshot / US-EOD caveats
+that lived only in docstrings and `OPERATING.md`) reaches the screen where the
+claim is actually made — the review's praise was for the honesty, so don't hide it
+from the user. `ThesisExplanation` gains a `caveat`: the value thesis's "cheap"
+ratios (E/P, B/P, FCF yield) come from a single current fundamentals snapshot, not
+audited period-by-period history, so the Today and thesis-detail cards now say so
+inline ("…a starting point, so check the company's filings before acting"). A
+shared `explain.PRICE_CAVEAT` (a Jinja global) notes that displayed prices are
+end-of-day and US-only on the free tier — shown on Positions (when prices are on)
+and the Buy-list. Subtle `.caveat` styling (muted, info-toned ⓘ — distinct from the
+red ⚠ earnings warning) keeps it honest without alarming. Pure-function + template
+change; no migration, no new dependency.
 
 ## Future
 

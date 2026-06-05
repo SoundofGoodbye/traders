@@ -21,6 +21,7 @@
       <p class="lead">{{ explanation.strategy }}</p>
       <p class="sell"><b>{{ explanation.sell_when }}</b></p>
       {% if explanation.earnings_warning %}<p class="warn">⚠ {{ explanation.earnings_warning }}</p>{% endif %}
+      {% if explanation.caveat %}<p class="caveat">ⓘ {{ explanation.caveat }}</p>{% endif %}
     </div>
     {% if explanation.glossary %}
       <ul class="glossary">

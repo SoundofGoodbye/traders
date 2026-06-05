@@ -78,3 +78,4 @@ def test_positions_unrealized_pnl_with_price_fn(tmp_path):
     resp = client.get("/positions")
     assert resp.status_code == 200
     assert "+50.00%" in resp.text
+    assert "end-of-day" in resp.text  # B8: price caveat shown where prices are

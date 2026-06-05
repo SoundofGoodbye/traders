@@ -42,6 +42,15 @@ class ThesisExplanation:
     sell_when: str
     earnings_warning: str | None
     glossary: list[GlossaryItem]
+    caveat: str | None = None  # honesty note when the claim rests on snapshot data
+
+
+# Shown wherever a price is displayed: the data is end-of-day, not live, and the
+# free tier is US-only — so a price isn't a tradable quote and may be missing.
+PRICE_CAVEAT = (
+    "Prices are end-of-day, not live (the free data tier is US-only), so treat "
+    "them as a reference point — not a quote to trade on."
+)
 
 
 _TAG_RE = re.compile(r"^\[(?:signal|llm|stub)\]\s*")
@@ -294,6 +303,22 @@ def _glossary_for(text: str) -> list[GlossaryItem]:
     ]
 
 
+def _caveat(thesis: Thesis) -> str | None:
+    """A point-of-claim honesty note when a thesis leans on snapshot data.
+
+    The value thesis's "cheap" flags (E/P, B/P, FCF yield) are derived from a
+    single current fundamentals snapshot, not audited period-by-period history —
+    so we say so where the claim is made, rather than only in the docs.
+    """
+    if "value flags" in (thesis.rationale or ""):
+        return (
+            "The cheap ratios (E/P, B/P, FCF yield) come from the latest data "
+            "snapshot, not audited multi-year history — a starting point, so check "
+            "the company's filings before acting."
+        )
+    return None
+
+
 def explain_thesis(thesis: Thesis) -> ThesisExplanation:
     """Translate a thesis into a beginner-friendly explanation + glossary."""
     combined = f"{thesis.rationale or ''} {thesis.exit_condition or ''}"
@@ -302,6 +327,7 @@ def explain_thesis(thesis: Thesis) -> ThesisExplanation:
         sell_when=_sell_when(thesis.exit_condition),
         earnings_warning=_earnings_warning(thesis.rationale),
         glossary=_glossary_for(combined),
+        caveat=_caveat(thesis),
     )
 
 

@@ -94,9 +94,10 @@ persona thinks in years and businesses.
 
 The code's caveats are honest; the screen isn't. Make the UI as truthful as the docs.
 
-### B8 — Surface data caveats at the point of claim  · P1 · S
+### B8 — Surface data caveats at the point of claim  · P1 · S  · ✅ shipped (slice 39)
 - **Problem:** snapshot/US-EOD caveats live in docstrings/`OPERATING.md`, not where the claim is rendered (`today.html`, `web/explain.py`).
 - **Proposal:** inline caveat badges ("from a current snapshot, not audited history"; "US end-of-day prices"). Cheap, high-trust.
+- **Shipped:** slice 39 — `ThesisExplanation.caveat` (value "cheap" ratios are a current snapshot → shown on Today + thesis detail) and a shared `explain.PRICE_CAVEAT` (end-of-day / US-only) on Positions + Buy-list, with subtle `.caveat` styling.
 
 ### B9 — Reframe **Today** to dampen the daily-action reflex  · P1 · S/M
 - **Problem:** Today reads as a daily buy-list with "ride the uptrend" nudges to a beginner — manufactures overtrading.

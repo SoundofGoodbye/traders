@@ -95,3 +95,4 @@ def test_triggered_target_shows_ready(tmp_path):
     resp = client.get("/buy-list")
     assert "AAA" in resp.text
     assert "Ready" in resp.text
+    assert "end-of-day" in resp.text  # B8: price caveat shown alongside the prices

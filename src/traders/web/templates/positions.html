@@ -22,6 +22,8 @@
   {% if not has_prices %}
     <p class="sub">Live prices are off, so open trades can't show a paper profit/loss yet —
       start with <code>--data-source yfinance</code> to turn them on.</p>
+  {% else %}
+    <p class="caveat">ⓘ {{ price_caveat }}</p>
   {% endif %}
 
   <h2>Open</h2>

@@ -174,6 +174,26 @@ def test_no_earnings_warning_by_default():
     assert explain_thesis(_thesis()).earnings_warning is None
 
 
+# --- snapshot caveat (B8) ---------------------------------------------------
+
+
+def test_value_thesis_carries_snapshot_caveat():
+    ex = explain_thesis(
+        _thesis(
+            thesis_type="value",
+            rationale="[signal] cheap: E/P 8.0%, B/P 0.7, FCF yield 6.0% (3/3 value flags); "
+            "value long.",
+        )
+    )
+    assert ex.caveat is not None
+    assert "snapshot" in ex.caveat and "filings" in ex.caveat
+
+
+def test_non_value_thesis_has_no_caveat():
+    # A momentum thesis makes no snapshot-based claim -> no caveat.
+    assert explain_thesis(_thesis()).caveat is None
+
+
 # --- LLM / custom theses degrade gracefully ---------------------------------
 
 

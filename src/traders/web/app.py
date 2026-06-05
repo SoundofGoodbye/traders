@@ -65,6 +65,7 @@ def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = 
     templates.env.globals["describe_position"] = explain.describe_position
     templates.env.globals["describe_schedule"] = explain.describe_schedule
     templates.env.globals["describe_job_status"] = explain.describe_job_status
+    templates.env.globals["price_caveat"] = explain.PRICE_CAVEAT
     app = FastAPI(title="traders", docs_url=None, redoc_url=None)
     # Pin TRADERS_WEB_SECRET to keep CSRF cookies valid across restarts;
     # otherwise a fresh per-process secret is fine for a single-user tool.

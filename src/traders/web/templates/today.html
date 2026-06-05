@@ -24,6 +24,7 @@
             <p class="lead">{{ ex.strategy }}</p>
             <p class="sell"><b>{{ ex.sell_when }}</b></p>
             {% if ex.earnings_warning %}<p class="warn">⚠ {{ ex.earnings_warning }}</p>{% endif %}
+            {% if ex.caveat %}<p class="caveat">ⓘ {{ ex.caveat }}</p>{% endif %}
           </div>
           <p class="meta"><a class="link" href="/theses/{{ t.id }}">Full breakdown &amp; how to record a buy →</a></p>
         </article>
