@@ -25,8 +25,14 @@ the slice-33/34 period series, resolved look-ahead-safe). It gates *only* the
 value thesis: a cheap name with a confirmed weak F-score is vetoed (a value
 trap), a confirmed-strong one is conviction-boosted, and an unknown or too-sparse
 score falls back to the cheap-only thesis — so, like the ``fundamentals`` path,
-it is additive (no ``quality`` => unchanged). PEAD/SUE (needs consensus
-estimates) remains deferred.
+it is additive (no ``quality`` => unchanged).
+
+Slice 36 (B3) adds the third value leg: an optional ``valuation`` map (per-ticker
+intrinsic value / margin of safety from :mod:`traders.valuation`). A cheap, sound
+name trading without a margin of safety to intrinsic value is vetoed, and when an
+estimate is present margin of safety — not flag count — drives the value thesis's
+conviction (quality can still nudge it up by one). Also additive: no ``valuation``
+=> slice-35 behaviour. PEAD/SUE (needs consensus estimates) remains deferred.
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from traders.fundamentals import Fundamentals
 from traders.prices import PriceHistory
 from traders.quality import PiotroskiScore
 from traders.signals import DraftThesis
+from traders.valuation import DEFAULT_MIN_MARGIN_OF_SAFETY, IntrinsicValue
 from traders.signals_lib import (
     book_to_price,
     closes_before,
@@ -52,6 +59,11 @@ from traders.signals_lib import (
 
 _STOP = "a -8% stop"
 
+# Margin-of-safety conviction bands (slice 36): the deeper the discount to
+# intrinsic value, the higher the conviction a value thesis earns.
+_MOS_STRONG = 0.50  # >=50% below intrinsic value -> conviction 5
+_MOS_GOOD = 0.35  # >=35% -> conviction 4 (else 3, down to the gate minimum)
+
 
 def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.1f}"
@@ -59,6 +71,15 @@ def _fmt(value: float | None) -> str:
 
 def _fmt_pct(value: float | None) -> str:
     return "n/a" if value is None else f"{value * 100:.1f}%"
+
+
+def _mos_conviction(margin_of_safety: float) -> int:
+    """Conviction (3–5) from a value thesis's margin of safety (slice 36)."""
+    if margin_of_safety >= _MOS_STRONG:
+        return 5
+    if margin_of_safety >= _MOS_GOOD:
+        return 4
+    return 3
 
 
 @dataclass(frozen=True)
@@ -88,6 +109,12 @@ class SignalThesisGenerator:
     min_piotroski_score: int = 5  # gate: F-score >= 5 to survive the quality check
     min_piotroski_computable: int = 5  # need >=5 of 9 tests to judge quality at all
     strong_piotroski_score: int = 7  # at/above this, bump value conviction by one
+    # Slice 36 (B3) — margin-of-safety gate on the value thesis (optional; absent
+    # => value behaves as slice 35). A cheap, sound name with no margin of safety
+    # vs its intrinsic value is vetoed, and margin of safety — not flag count —
+    # drives the value thesis's conviction when an estimate is available.
+    valuation: dict[str, IntrinsicValue] | None = None
+    min_margin_of_safety: float = DEFAULT_MIN_MARGIN_OF_SAFETY  # gate: need >= this MoS
 
     def generate(self, ticker: str, content: str) -> list[DraftThesis]:
         closes = closes_before(self.history, ticker, self.as_of)
@@ -166,8 +193,13 @@ class SignalThesisGenerator:
         if flags < self.value_flags_for_thesis:
             return None
         base_conviction = 4 if flags == 3 else 3
-        passes, conviction, quality_note = self._apply_quality_gate(ticker, base_conviction)
-        if not passes:
+        # Margin-of-safety leg (slice 36 / B3): may veto and (re)set the base.
+        mos_ok, base_conviction, mos_note = self._apply_value_gate(ticker, base_conviction)
+        if not mos_ok:
+            return None  # cheap and sound, but no discount to intrinsic value
+        # Quality leg (slice 35 / B4): may veto and nudge conviction up.
+        quality_ok, conviction, quality_note = self._apply_quality_gate(ticker, base_conviction)
+        if not quality_ok:
             return None  # cheap but a confirmed weak balance sheet -> value trap
         return DraftThesis(
             thesis_type="value",
@@ -178,9 +210,31 @@ class SignalThesisGenerator:
             rationale=(
                 f"[signal] cheap: E/P {_fmt_pct(ey)}, B/P {_fmt(bp)}, "
                 f"FCF yield {_fmt_pct(fy)} ({flags}/3 value flags); value long."
-                f"{quality_note}{note}"
+                f"{mos_note}{quality_note}{note}"
             ),
         )
+
+    def _apply_value_gate(self, ticker: str, base_conviction: int) -> tuple[bool, int, str]:
+        """Decide a cheap name's fate from its margin of safety (slice 36 / B3).
+
+        Returns ``(passes, conviction, mos_note)``. With no valuation map or no
+        estimate for ``ticker`` the name passes unchanged (additive fallback). With
+        an estimate it gates: a margin of safety below the minimum is vetoed (cheap
+        and sound, but the price isn't far enough below intrinsic value), and
+        otherwise margin of safety — not flag count — sets the conviction.
+        """
+        v = self.valuation.get(ticker) if self.valuation else None
+        if v is None:
+            return True, base_conviction, ""
+        if v.margin_of_safety < self.min_margin_of_safety:
+            return False, base_conviction, ""
+        note = (
+            f" Intrinsic value ~${v.iv_per_share:.0f}/sh; margin of safety "
+            f"{v.margin_of_safety * 100:.0f}% ({v.years}yr owner earnings; "
+            f"r {v.discount_rate * 100:.0f}%, g {v.terminal_growth * 100:.0f}%); "
+            f"price implies {v.implied_growth * 100:.0f}% growth."
+        )
+        return True, _mos_conviction(v.margin_of_safety), note
 
     def _apply_quality_gate(self, ticker: str, base_conviction: int) -> tuple[bool, int, str]:
         """Decide a cheap name's fate from its Piotroski score (slice 35 / B4).
@@ -246,9 +300,11 @@ def build_signal_generator(conn, as_of: date | None = None, **kwargs) -> SignalT
     from traders.fundamentals import load_fundamentals_asof
     from traders.prices import load_history_from_db
     from traders.quality import quality_scores_asof
+    from traders.valuation import valuations_asof
 
     when = as_of or date.today()
     history = load_history_from_db(conn)
     kwargs.setdefault("fundamentals", load_fundamentals_asof(conn, as_of=when.isoformat()))
     kwargs.setdefault("quality", quality_scores_asof(conn, as_of=when.isoformat()))
+    kwargs.setdefault("valuation", valuations_asof(conn, history, as_of=when))
     return SignalThesisGenerator(history=history, as_of=when, **kwargs)

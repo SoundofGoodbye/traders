@@ -52,13 +52,14 @@ This cluster turns "statistically cheap" into something defensible.
 - **Depends on:** B1.
 - **Shipped:** slice 34 — `traders.quality`: the 9-test Piotroski F-score over the slice-33 series, with a look-ahead-safe `piotroski_for(conn, ticker, as_of=...)` and a `computable` denominator for sparse data. Landed in its own module (not `signals_lib`) to keep that a leaf — it needs the `FundamentalPeriod` type. **Still open:** ROIC/ROE trend, interest coverage, debt-maturity — extend `traders.quality` on the same pattern. **Next:** B4 wires the score into the value thesis as a gate.
 
-### B3 — Margin-of-safety / intrinsic-value estimate  · P0 · M/L
+### B3 — Margin-of-safety / intrinsic-value estimate  · P0 · M/L  · ✅ shipped (slice 36)
 - **Problem:** no concept of *worth*; "cheap" is a ratio vs itself, not price vs value.
 - **Proposal:** transparent reverse-DCF / normalized-earnings estimate per name; surface "price implies ~X% growth" and a buy-below band. Assumptions explicit and editable.
 - **Why:** the line between investing and trading.
 - **Depends on:** B1.
+- **Shipped:** slice 36 — `traders.valuation`: normalized owner earnings (multi-year CFO+capex) capitalized at a conservative Gordon multiple (r 10%, g 2%) → per-share intrinsic value, margin of safety, buy-below price, reverse-DCF implied growth. Wired as the value thesis's margin-of-safety gate (veto below 20% MoS; MoS drives conviction) and surfaced in plain English. Additive (no estimate ⇒ slice-35 behaviour). **Deferred:** a true multi-stage DCF and a maintenance-vs-growth capex split.
 
-### B4 — Gate the `value` thesis on quality + margin of safety  · P0 · S  · 🟡 quality gate shipped (slice 35); margin-of-safety pending B3
+### B4 — Gate the `value` thesis on quality + margin of safety  · P0 · S  · ✅ shipped (slices 35 + 36)
 - **Problem:** value thesis fires on ≥2-of-3 cheap flags alone (`signals_thesis._value_thesis`).
 - **Proposal:** require cheap **and** quality-pass **and** margin-of-safety; derive conviction from margin of safety, not flag count.
 - **Depends on:** B2, B3.
@@ -138,15 +139,19 @@ The code's caveats are honest; the screen isn't. Make the UI as truthful as the 
 
 ## Recommended next slice
 
-**Shipped so far:** B1 (slice 33, fundamentals series), B2-Piotroski (slice 34,
-quality score), B4-quality (slice 35, value-trap veto + conviction fold). The
-value thesis now requires *cheap **and** financially sound* — the review's
-sharpest criticism is substantially closed; the plain-English layer surfaces it.
+**The P0 value-trap cluster is complete:** B1 (slice 33, fundamentals series),
+B2-Piotroski (slice 34, quality score), B4 + B3 (slices 35–36, the full two-leg
+gate). A `value` thesis now requires *cheap **and** financially sound **and** a
+margin of safety to intrinsic value*, with margin of safety driving conviction and
+the plain-English layer explaining it. The review's sharpest criticism is closed
+end-to-end.
 
-**Next: B3 (margin-of-safety / intrinsic-value estimate).** It completes the B4
-gate (cheap **and** quality **and** a margin of safety) and lets margin of safety —
-not flag count — drive conviction; it reads the slice-33 series already in place.
-Alternatives if you'd rather pivot: **B5** (buy-list with price triggers — the
-review's highest-leverage *UX* change, flips the daily-action reflex) or finish the
-**B2 remainder** (ROIC/ROE trend, interest coverage) on the slice-34 `quality`
-module.
+**Next — pick the thread:**
+- **B5 (recommended) — buy-list with price triggers.** The review's highest-leverage
+  *UX* change: name businesses you'd own and a buy-below price, get surfaced when hit
+  — flips the daily-action reflex. The slice-36 `buy_below_price` already computes a
+  natural trigger to build on.
+- **B2 remainder** — ROIC/ROE trend, interest coverage, debt-maturity on the
+  slice-34 `quality` module.
+- **B8/B9** — the honesty-gap UI items (caveats at point of claim; reframe Today),
+  cheap and high-trust for a beginner.

@@ -2,7 +2,7 @@
 
 The build plan for `traders`. Each slice is a self-contained increment — propose and ship one at a time.
 
-**Status: slices 0–35 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–35 (from the persona-review [backlog](backlog.md): items B1, B2, B4) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a quality gate on the value thesis that vetoes cheap-but-deteriorating "value traps". The `Future` section at the bottom lists deferred ideas, not committed work.
+**Status: slices 0–36 are shipped.** Slices 18–29 completed the improvement plan; slices 30–32 added the Tiingo price source, a `.env` config loader, and job control in the web UI; slices 33–36 (from the persona-review [backlog](backlog.md): items B1, B2, B4, B3) add period-by-period fundamentals ingestion, a Piotroski quality score over them, and a two-leg gate on the value thesis — quality (no cheap-but-deteriorating "value traps") and a margin of safety to intrinsic value (no cheap-but-fully-priced names) — with margin of safety driving conviction. The `Future` section at the bottom lists deferred ideas, not committed work.
 
 ## Slice 0 — scaffold
 
@@ -282,6 +282,41 @@ signals` / `run-daily` pick it up once `ingest-fundamental-periods` has run. No
 migration, no new dependency. **Deferred:** the *margin-of-safety* leg of the gate
 (B3) — value will require cheap **and** quality-pass **and** a margin of safety
 once an intrinsic-value estimate lands.
+
+## Slice 36 — Margin-of-safety gate on the value thesis
+
+[Backlog](backlog.md) item **B3** — the third and final leg of the value gate, so
+a `value` thesis now requires cheap **and** financially sound **and** trading at a
+discount to a transparent worth estimate. `traders.valuation` capitalizes
+**normalized owner earnings** (operating cash flow + capex, averaged over the
+recent annual periods of the slice-33 series) at a conservative Gordon multiple
+`(1+g)/(r−g)` with `r = 10%`, `g = 2%`, yielding an `IntrinsicValue` — per-share
+value, **margin of safety** vs the price, a **buy-below** price, and a reverse-DCF
+**implied growth** ("what the price already pays for"). Assumption-explicit by
+design (the review asked for transparency, not a black box).
+
+The `SignalThesisGenerator` gains an optional `valuation` map
+(`valuation.valuations_asof`, look-ahead-safe: each name's price is the last close
+before the decision day, its statements the periods public by then). `_value_thesis`
+adds the margin-of-safety leg ahead of the quality leg:
+
+- a cheap, sound name with **margin of safety below the minimum** (default 20%) is
+  **vetoed** — no discount to intrinsic value, no thesis;
+- when an estimate is present, **margin of safety drives conviction** (≥50% → 5,
+  ≥35% → 4, else 3) — replacing the flag-count base, per the review's "conviction
+  should mean something"; the quality leg can still nudge it up by one;
+- an **unknown** estimate (negative/too-sparse owner earnings, no price/shares)
+  **falls back** to the slice-35 behaviour.
+
+**Additive by construction** like the quality leg: no `valuation` map ⇒ byte-identical
+to slice 35. The estimate is recorded in the rationale (`Intrinsic value ~$X/sh;
+margin of safety Y% (Nyr owner earnings; r 10%, g 2%); price implies Z% growth`),
+and `web.explain` gains glossary entries (intrinsic value, margin of safety, owner
+earnings) plus a plain "we peg its rough worth near $X a share — about Y% above
+today's price" sentence. `build_signal_generator` wires it automatically. No
+migration, no new dependency. **Deferred:** a true multi-stage DCF and a
+maintenance-vs-growth capex split — the v1 capitalization is intentionally simple
+and conservative.
 
 ## Future
 

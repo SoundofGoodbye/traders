@@ -51,6 +51,8 @@ _Z_RE = re.compile(r"20-day z (n/a|[+-]?\d+(?:\.\d+)?)")
 _FLAGS_RE = re.compile(r"\((\d)/3 value flags\)")
 _STOP_RE = re.compile(r"(\d+)%\s*stop")
 _PIOTROSKI_RE = re.compile(r"Piotroski (\d)/9")
+_IV_RE = re.compile(r"Intrinsic value ~\$(\d+(?:\.\d+)?)/sh")
+_MOS_RE = re.compile(r"margin of safety (\d+)%")
 
 # (term, definition, trigger substrings) — included when a trigger appears in
 # the thesis's rationale or exit text (matched case-insensitively).
@@ -110,6 +112,24 @@ _GLOSSARY: tuple[tuple[str, str, tuple[str, ...]], ...] = (
         "debt, and efficiency the company passes. Higher is healthier — it filters "
         "out cheap-but-failing 'value traps'.",
         ("piotroski",),
+    ),
+    (
+        "Intrinsic value",
+        "A rough estimate of what the business is worth per share, based on the cash "
+        "it generates — independent of today's market price.",
+        ("intrinsic value",),
+    ),
+    (
+        "Margin of safety",
+        "How far below our worth estimate the price sits. A bigger cushion leaves "
+        "more room for error if the estimate is too optimistic.",
+        ("margin of safety",),
+    ),
+    (
+        "Owner earnings",
+        "The cash a business throws off after the spending needed to keep it running "
+        "(operating cash flow minus capital spending).",
+        ("owner earnings",),
     ),
     (
         "NAV",
@@ -198,6 +218,12 @@ def _value_strategy(ticker: str, rationale: str) -> str:
         text += (
             f" Its financial-health score is {pio.group(1)} out of 9 (higher is "
             "healthier), so it's cheap *and* sound — not just statistically cheap."
+        )
+    iv, mos = _IV_RE.search(rationale), _MOS_RE.search(rationale)
+    if iv and mos:
+        text += (
+            f" We peg its rough worth near ${iv.group(1)} a share — about "
+            f"{mos.group(1)}% above today's price, a built-in margin of safety."
         )
     return text
 

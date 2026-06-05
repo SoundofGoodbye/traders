@@ -14,6 +14,7 @@ from traders.fundamentals import Fundamentals, save_fundamentals
 from traders.prices import PriceHistory, save_prices
 from traders.quality import PiotroskiScore
 from traders.signals_thesis import SignalThesisGenerator, build_signal_generator
+from traders.valuation import IntrinsicValue
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 START = date(2025, 1, 1)
@@ -354,3 +355,137 @@ def test_build_signal_generator_passes_strong_quality_value():
     assert d.thesis_type == "value"
     assert d.conviction == 5
     assert "Piotroski 9/9" in d.rationale
+
+
+# ---- value margin-of-safety gate (slice 36 / B3) -------------------------
+
+
+def _iv(margin_of_safety: float, *, iv_ps: float = 140.0, years: int = 5) -> IntrinsicValue:
+    return IntrinsicValue(
+        owner_earnings=11000.0,
+        years=years,
+        shares=1000.0,
+        price=100.0,
+        iv_total=iv_ps * 1000.0,
+        iv_per_share=iv_ps,
+        margin_of_safety=margin_of_safety,
+        buy_below_price=iv_ps * 0.8,
+        implied_growth=0.01,
+        discount_rate=0.10,
+        terminal_growth=0.02,
+    )
+
+
+def _improving(cfo_cur: float, cfo_prev: float) -> list[dict]:
+    """An improving annual pair (Piotroski 9/9) with tunable cash flow for MoS."""
+    return [
+        _annual(
+            "2024-12-31",
+            "2025-02-15",
+            revenue=12000.0,
+            gross_profit=4200.0,
+            net_income=6000.0,
+            operating_cash_flow=cfo_cur,
+            capital_expenditure=-300.0,
+            total_assets=21000.0,
+            current_assets=8000.0,
+            current_liabilities=4000.0,
+            long_term_debt=3000.0,
+            shares_outstanding=1000.0,
+        ),
+        _annual(
+            "2023-12-31",
+            "2024-02-15",
+            revenue=10000.0,
+            gross_profit=3000.0,
+            net_income=5000.0,
+            operating_cash_flow=cfo_prev,
+            capital_expenditure=-300.0,
+            total_assets=20000.0,
+            current_assets=6000.0,
+            current_liabilities=4000.0,
+            long_term_debt=5000.0,
+            shares_outstanding=1000.0,
+        ),
+    ]
+
+
+def test_cheap_without_margin_of_safety_is_vetoed():
+    # Cheap on flags, but priced only 5% below intrinsic value -> no margin -> skip.
+    gen = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        valuation={"AAA": _iv(0.05)},
+    )
+    assert gen.generate("AAA", "") == []
+
+
+def test_margin_of_safety_drives_conviction():
+    d = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        valuation={"AAA": _iv(0.55)},  # deep discount -> conviction 5
+    ).generate("AAA", "")[0]
+    assert d.conviction == 5
+    assert "margin of safety 55%" in d.rationale
+
+
+def test_modest_margin_of_safety_lowers_conviction_below_flag_base():
+    # 25% MoS -> band 3, overriding the flag-based 4 (MoS drives conviction).
+    d = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        valuation={"AAA": _iv(0.25)},
+    ).generate("AAA", "")[0]
+    assert d.conviction == 3
+
+
+def test_margin_of_safety_and_quality_compound():
+    d = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        valuation={"AAA": _iv(0.40)},  # band 4
+        quality={"AAA": PiotroskiScore(score=8, computable=9, components={})},  # +1
+    ).generate("AAA", "")[0]
+    assert d.conviction == 5
+    assert "margin of safety 40%" in d.rationale and "Piotroski 8/9" in d.rationale
+
+
+def test_unknown_valuation_falls_back_to_flag_conviction():
+    d = _gen(
+        "AAA",
+        [100.0] * 100,
+        fundamentals={"AAA": _cheap("AAA")},
+        valuation={"BBB": _iv(0.05)},  # no entry for AAA
+    ).generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert d.conviction == 4
+    assert "margin of safety" not in d.rationale
+
+
+def test_build_signal_generator_vetoes_when_no_margin_of_safety():
+    conn = _conn()
+    closes = [100.0] * 100
+    save_prices(conn, "AAA", list(_series(closes)))
+    save_fundamentals(conn, [_cheap("AAA")])
+    save_periods(conn, periods_from_statements("AAA", _improving(8300.0, 8000.0)))  # IV ~= price
+    as_of = START + timedelta(days=len(closes))
+    assert build_signal_generator(conn, as_of=as_of).generate("AAA", "") == []
+
+
+def test_build_signal_generator_value_with_margin_of_safety():
+    conn = _conn()
+    closes = [100.0] * 100
+    save_prices(conn, "AAA", list(_series(closes)))
+    save_fundamentals(conn, [_cheap("AAA")])
+    save_periods(conn, periods_from_statements("AAA", _improving(11500.0, 11000.0)))  # IV ~140
+    as_of = START + timedelta(days=len(closes))
+    d = build_signal_generator(conn, as_of=as_of).generate("AAA", "")[0]
+    assert d.thesis_type == "value"
+    assert "margin of safety" in d.rationale
+    assert "Piotroski 9/9" in d.rationale  # same improving periods score 9
+    assert d.conviction == 4  # MoS ~28% (band 3) + strong quality (+1)

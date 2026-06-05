@@ -140,6 +140,22 @@ def test_value_strategy_surfaces_quality_score():
     assert "Piotroski score" in {g.term for g in ex.glossary}
 
 
+def test_value_strategy_surfaces_margin_of_safety():
+    ex = explain_thesis(
+        _thesis(
+            thesis_type="value",
+            conviction=4,
+            rationale="[signal] cheap: E/P 8.0%, B/P 0.7, FCF yield 6.0% (3/3 value flags); "
+            "value long. Intrinsic value ~$140/sh; margin of safety 29% (5yr owner "
+            "earnings; r 10%, g 2%); price implies 1% growth.",
+            exit_condition="Exit when the valuation re-rates (cheap flags lapse) or a -8% stop.",
+        )
+    )
+    assert "$140 a share" in ex.strategy and "29%" in ex.strategy
+    terms = {g.term for g in ex.glossary}
+    assert {"Intrinsic value", "Margin of safety", "Owner earnings"} <= terms
+
+
 # --- earnings warning -------------------------------------------------------
 
 
