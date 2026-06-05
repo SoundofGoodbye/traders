@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 import statistics
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from traders.post_mortems import compute_pnl_pct
 from traders.strategy import StrategyGoal
@@ -31,6 +31,7 @@ class ClosedTrade:
     direction: str
     pnl_pct: float
     closed_at: str
+    opened_at: str | None = None  # for holding-period framing (slice 44); optional
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class Metrics:
     return_pct_30d: float
     max_drawdown_pct: float
     sharpe_per_trade: float | None
+    avg_holding_days: float | None = None  # mean days held across closed trades (slice 44)
 
 
 @dataclass(frozen=True)
@@ -64,18 +66,34 @@ class ScoreCard:
 def closed_trades(conn: sqlite3.Connection) -> list[ClosedTrade]:
     """Closed positions with a computable PnL, oldest close first."""
     rows = conn.execute(
-        "SELECT p.ticker, t.direction, p.entry_price, p.exit_price, p.closed_at"
+        "SELECT p.ticker, t.direction, p.entry_price, p.exit_price, p.closed_at, p.opened_at"
         " FROM positions p JOIN theses t ON t.id = p.thesis_id"
         " WHERE p.status = 'closed' AND p.closed_at IS NOT NULL"
         " ORDER BY p.closed_at, p.id"
     ).fetchall()
     trades: list[ClosedTrade] = []
-    for ticker, direction, entry, exit_, closed_at in rows:
+    for ticker, direction, entry, exit_, closed_at, opened_at in rows:
         pnl = compute_pnl_pct(direction, entry, exit_)
         if pnl is None:
             continue
-        trades.append(ClosedTrade(ticker, direction, pnl, closed_at))
+        trades.append(ClosedTrade(ticker, direction, pnl, closed_at, opened_at))
     return trades
+
+
+def _holding_days(opened_at: str | None, closed_at: str | None) -> int | None:
+    """Whole days between two ISO timestamps, or None when not computable."""
+    if not opened_at or not closed_at:
+        return None
+    try:
+        days = (date.fromisoformat(closed_at[:10]) - date.fromisoformat(opened_at[:10])).days
+    except ValueError:
+        return None
+    return days if days >= 0 else None
+
+
+def _avg_holding_days(trades: list[ClosedTrade]) -> float | None:
+    spans = [d for t in trades if (d := _holding_days(t.opened_at, t.closed_at)) is not None]
+    return (sum(spans) / len(spans)) if spans else None
 
 
 def _max_drawdown_pct(trades: list[ClosedTrade]) -> float:
@@ -132,6 +150,7 @@ def metrics_from_trades(trades: list[ClosedTrade], now: datetime | None = None) 
         return_pct_30d=_return_30d(trades, reference),
         max_drawdown_pct=_max_drawdown_pct(trades),
         sharpe_per_trade=sharpe,
+        avg_holding_days=_avg_holding_days(trades),
     )
 
 

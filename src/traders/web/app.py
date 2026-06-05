@@ -26,6 +26,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from traders import buylist, feedback, intact, jobs
+from traders import metrics as metrics_mod
 from traders.db import apply_migrations, connect
 from traders.post_mortems import compute_pnl_pct
 from traders.prices import load_history_from_db
@@ -51,7 +52,11 @@ def _open_position_view(
 
 def _closed_position_view(position: queries.Position) -> dict[str, Any]:
     pnl = compute_pnl_pct(position.direction or "long", position.entry_price, position.exit_price)
-    return {"p": position, "pnl_pct": pnl}
+    return {
+        "p": position,
+        "pnl_pct": pnl,
+        "held_days": metrics_mod._holding_days(position.opened_at, position.closed_at),
+    }
 
 
 def create_app(db_path: str | Path | None = None, *, price_fn: PriceFn | None = None) -> FastAPI:

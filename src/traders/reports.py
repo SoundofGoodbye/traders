@@ -163,9 +163,12 @@ def _metrics_text(card: ScoreCard) -> str:
         f"Strategy scorecard — verdict: {card.verdict.upper()}",
         f"  closed positions: {card.metrics.num_closed}",
     ]
+    if card.metrics.avg_holding_days is not None:
+        lines.append(f"  avg holding period: {card.metrics.avg_holding_days:.0f} days")
     for c in card.criteria:
         flag = "PASS" if c.passed else "FAIL"
         lines.append(f"  {c.name}: {_fmt_value(c.value)} (threshold {c.threshold:.2f}) {flag}")
+    lines.append("  (returns are total return — dividends included via adjusted closes)")
     return "\n".join(lines)
 
 
@@ -174,6 +177,10 @@ def _metrics_markdown(card: ScoreCard) -> str:
         f"# Strategy Scorecard — {card.verdict.replace('_', ' ').title()}",
         "",
         f"**Closed positions:** {card.metrics.num_closed}",
+    ]
+    if card.metrics.avg_holding_days is not None:
+        lines.append(f"**Avg holding period:** {card.metrics.avg_holding_days:.0f} days")
+    lines += [
         "",
         "| Criterion | Value | Threshold | Result |",
         "| --- | --- | --- | --- |",
@@ -181,6 +188,8 @@ def _metrics_markdown(card: ScoreCard) -> str:
     for c in card.criteria:
         flag = "✅" if c.passed else "❌"
         lines.append(f"| {c.name} | {_fmt_value(c.value)} | {c.threshold:.2f} | {flag} |")
+    lines.append("")
+    lines.append("_Returns are total return — dividends included via adjusted closes._")
     return "\n".join(lines)
 
 

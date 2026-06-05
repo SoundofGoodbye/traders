@@ -85,9 +85,10 @@ persona thinks in years and businesses.
 - **Depends on:** B1.
 - **Shipped:** slice 43 — `traders.intact.thesis_intact` flags lossmaking / cash burn / tight liquidity / weak Piotroski / collapsing margin from the slice-33 series (look-ahead-safe, plain English); surfaced as a "⚠ Premise check" row on open positions.
 
-### B7 — Longer-horizon, total-return framing  · P1 · S/M
+### B7 — Longer-horizon, total-return framing  · P1 · S/M  · ✅ shipped (slice 44)
 - **Problem:** framing is short-horizon; no dividends/total return, no multi-quarter holding view.
 - **Proposal:** total return incl. dividends in `metrics`/positions; report holding-period returns; surface longer windows.
+- **Shipped:** slice 44 — `metrics.avg_holding_days` + scorecard line; Positions shows held-days per closed trade; a standing "returns are total return (dividends via adjusted closes)" note (Tiingo adjClose already bakes dividends into price returns).
 
 ---
 

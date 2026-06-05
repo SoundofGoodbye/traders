@@ -105,6 +105,20 @@ def test_positions_shows_broken_premise(tmp_path):
     assert "lossmaking" in text
 
 
+def test_positions_closed_shows_holding_period(tmp_path):
+    # B7: a closed trade shows how long it was held.
+    from traders.feedback import record_sell
+
+    db_path = tmp_path / "t.db"
+    _seed(db_path, tmp_path)  # opens a long position on AAA
+    conn = connect(db_path)
+    pos_id = conn.execute("SELECT id FROM positions WHERE status='open' LIMIT 1").fetchone()[0]
+    record_sell(conn, price=120.0, position_id=pos_id)
+    conn.close()
+    client = TestClient(create_app(db_path))
+    assert "held" in client.get("/positions").text
+
+
 def test_routes_ok_on_empty_db(tmp_path):
     db_path = tmp_path / "empty.db"
     client = TestClient(create_app(db_path))

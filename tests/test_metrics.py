@@ -7,8 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from traders.db import apply_migrations
-from traders.metrics import compute_and_score, compute_metrics, score
-from traders.strategy import StrategyGoal
+from traders.metrics import (
+    ClosedTrade,
+    compute_and_score,
+    compute_metrics,
+    metrics_from_trades,
+    score,
+)
+from traders.reports import render_metrics
+from traders.strategy import StrategyGoal, load_strategy
 
 MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"
 NOW = datetime(2025, 1, 31, tzinfo=timezone.utc)
@@ -187,3 +194,30 @@ def test_return_30d_includes_cutoff_date_for_date_only_closed_at():
     m = metrics_from_trades(trades, now=NOW)
 
     assert m.return_pct_30d == 7.0
+
+
+# ---- holding-period / total-return framing (slice 44 / B7) -----------------
+
+
+def test_avg_holding_days_from_trades():
+    trades = [
+        ClosedTrade("AAA", "long", 5.0, "2026-01-11", opened_at="2026-01-01"),  # 10 days
+        ClosedTrade("BBB", "long", -2.0, "2026-02-21", opened_at="2026-02-01"),  # 20 days
+    ]
+    m = metrics_from_trades(trades, now=datetime(2026, 3, 1, tzinfo=timezone.utc))
+    assert m.avg_holding_days == 15.0
+
+
+def test_avg_holding_days_none_without_open_dates():
+    m = metrics_from_trades([ClosedTrade("AAA", "long", 5.0, "2026-01-11")])
+    assert m.avg_holding_days is None
+
+
+def test_render_metrics_shows_holding_period_and_total_return():
+    trades = [ClosedTrade("AAA", "long", 5.0, "2026-01-11", opened_at="2026-01-01")]
+    card = score(
+        metrics_from_trades(trades, now=datetime(2026, 3, 1, tzinfo=timezone.utc)), load_strategy()
+    )
+    text = render_metrics(card)
+    assert "holding period" in text
+    assert "total return" in text
