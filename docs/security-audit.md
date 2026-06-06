@@ -339,19 +339,16 @@ Worked test-first, one commit per slice; full suite green throughout.
 - **L1** Stooq symbol quoted · **L2** Tiingo key → `Authorization` header ·
   **L3** `record_skip` rejects an open position · **L5** web security headers/CSP ·
   **L6** `parse_sources` drops dangerous URL schemes · **L7** ticker validation.
-- **D2** LLM tool-parser de-duplicated · **D3** `edgar_http` extracted ·
-  **D4** this doc + CLAUDE.md web-write contract corrected · **D5** `holding_days`
-  made public.
+- **D1** `cli.py` (1410 lines) decomposed into a `cli_commands/` package — a 31-line
+  entry point + per-domain command modules behind a `Command` registry · **D2** LLM
+  tool-parser de-duplicated · **D3** `edgar_http` extracted · **D4** this doc +
+  CLAUDE.md web-write contract corrected · **D5** `holding_days` made public ·
+  **D6** `run_backtest` inner loops extracted into named helpers.
+- **L4** — run-id allocation made atomic (`db.immediate`, BEGIN IMMEDIATE) and
+  `PRAGMA busy_timeout=5000` added so a concurrent web/cron writer waits for the lock
+  instead of erroring. Researcher/Analyst do their network I/O before taking the lock.
 
-**Deferred (deliberate, with rationale)**
-
-- **D1 — `cli.py` god-file split.** A 1410-line decomposition is its own reviewed
-  slice, not something to land blind inside a hardening batch. Unchanged.
-- **D6 — `run_backtest` extraction.** The audit rated it a watch-item, not a defect;
-  re-shaping a money-simulation loop unsupervised is poor risk/reward. Unchanged.
-- **L4 — run-id `SELECT MAX` race.** Theoretical under the single-process
-  orchestrator; the M3 index already closes the impactful (double-open) race.
-  Accepted risk; revisit if concurrency is ever introduced.
+**Deferred:** none — every audit finding (H1–H2, M1–M4, L1–L7, D1–D6) is addressed.
 
 ---
 
