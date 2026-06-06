@@ -80,7 +80,7 @@ def closed_trades(conn: sqlite3.Connection) -> list[ClosedTrade]:
     return trades
 
 
-def _holding_days(opened_at: str | None, closed_at: str | None) -> int | None:
+def holding_days(opened_at: str | None, closed_at: str | None) -> int | None:
     """Whole days between two ISO timestamps, or None when not computable."""
     if not opened_at or not closed_at:
         return None
@@ -91,8 +91,12 @@ def _holding_days(opened_at: str | None, closed_at: str | None) -> int | None:
     return days if days >= 0 else None
 
 
+# Back-compat alias; `holding_days` is the public name (audit D5).
+_holding_days = holding_days
+
+
 def _avg_holding_days(trades: list[ClosedTrade]) -> float | None:
-    spans = [d for t in trades if (d := _holding_days(t.opened_at, t.closed_at)) is not None]
+    spans = [d for t in trades if (d := holding_days(t.opened_at, t.closed_at)) is not None]
     return (sum(spans) / len(spans)) if spans else None
 
 

@@ -244,46 +244,20 @@ def _default_edgar_fetcher() -> Callable[[str], list[dict[str, Any]]]:
     if unset - same shape as how yfinance raises when the package
     isn't installed.
     """
-    import json
-    import os
-    import urllib.request
+    from traders import edgar_http
 
-    ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
-    if not ua:
-        raise RuntimeError(
-            "TRADERS_EDGAR_UA env var is required for the EDGAR data source. "
-            "Set it to a real contact string (e.g. "
-            "'Acme Research user@acme.com')."
-        )
-
+    ua = edgar_http.require_ua()
     cik_map: dict[str, str] = {}
-
-    def _fetch_json(url: str) -> Any:
-        from traders.net import read_capped
-
-        req = urllib.request.Request(url, headers={"User-Agent": ua})
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return json.loads(read_capped(resp))
-
-    def _load_cik_map() -> dict[str, str]:
-        payload = _fetch_json("https://www.sec.gov/files/company_tickers.json")
-        out: dict[str, str] = {}
-        for entry in payload.values():
-            if not isinstance(entry, dict):
-                continue
-            t = entry.get("ticker")
-            c = entry.get("cik_str")
-            if t and c is not None:
-                out[str(t).upper()] = str(c).zfill(10)
-        return out
 
     def fetch(ticker: str) -> list[dict[str, Any]]:
         if not cik_map:
-            cik_map.update(_load_cik_map())
+            cik_map.update(edgar_http.load_cik_map(ua))
         cik = cik_map.get(ticker.upper())
         if cik is None:
             return []
-        payload = _fetch_json(f"https://data.sec.gov/submissions/CIK{cik}.json")
+        payload = edgar_http.get_json(
+            f"https://data.sec.gov/submissions/CIK{cik}.json", ua, timeout=10
+        )
         recent = payload.get("filings", {}).get("recent", {})
         forms = recent.get("form", [])
         dates = recent.get("filingDate", [])
@@ -421,24 +395,16 @@ def _default_edgar_document_fetcher() -> Callable[[str], str]:
     Network only when called; reuses ``TRADERS_EDGAR_UA``. Strips the fetched
     HTML to text via :func:`traders.filing_text.extract_text`.
     """
-    import os
-    import urllib.request
+    from traders import edgar_http
 
-    ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
-    if not ua:
-        raise RuntimeError(
-            "TRADERS_EDGAR_UA env var is required for the EDGAR data source. "
-            "Set it to a real contact string (e.g. 'Acme Research user@acme.com')."
-        )
+    ua = edgar_http.require_ua()
 
     def fetch(url: str) -> str:
         from traders.filing_text import extract_text
+        from traders.net import MAX_FILING_BYTES
 
-        from traders.net import MAX_FILING_BYTES, read_capped
-
-        req = urllib.request.Request(url, headers={"User-Agent": ua})
-        with urllib.request.urlopen(req, timeout=20) as resp:  # noqa: S310 (vetted SEC URLs)
-            return extract_text(read_capped(resp, MAX_FILING_BYTES).decode("utf-8", "replace"))
+        raw = edgar_http.get_bytes(url, ua, timeout=20, max_bytes=MAX_FILING_BYTES)
+        return extract_text(raw.decode("utf-8", "replace"))
 
     return fetch
 

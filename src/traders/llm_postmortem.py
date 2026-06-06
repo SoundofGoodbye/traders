@@ -16,7 +16,7 @@ weekly Reviewer run. A *missing* ``llm`` extra still fails fast at first use
 
 from __future__ import annotations
 
-from traders.llm import LLMGenerator
+from traders.llm import LLMGenerator, extract_tool_input
 from traders.post_mortems import (
     ClosedPosition,
     PostMortemDraft,
@@ -58,15 +58,6 @@ _POST_MORTEM_TOOL = {
         "required": ["outcome", "lessons"],
     },
 }
-
-
-def _extract_tool_input(response: object) -> dict | None:
-    for block in getattr(response, "content", None) or []:
-        if getattr(block, "type", None) == "tool_use":
-            data = getattr(block, "input", None)
-            if isinstance(data, dict):
-                return data
-    return None
 
 
 def _draft_from_tool(data: dict) -> PostMortemDraft | None:
@@ -130,7 +121,7 @@ class LLMPostMortemGenerator(LLMGenerator):
                 tool_choice={"type": "tool", "name": "record_post_mortem"},
                 messages=[{"role": "user", "content": self._user_content(position, thesis, pnl)}],
             )
-            data = _extract_tool_input(response)
+            data = extract_tool_input(response)
             draft = _draft_from_tool(data) if data is not None else None
         except Exception:
             draft = None  # network / rate-limit / parse error -> deterministic fallback

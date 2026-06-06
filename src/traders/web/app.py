@@ -60,7 +60,7 @@ def _closed_position_view(position: queries.Position) -> dict[str, Any]:
     return {
         "p": position,
         "pnl_pct": pnl,
-        "held_days": metrics_mod._holding_days(position.opened_at, position.closed_at),
+        "held_days": metrics_mod.holding_days(position.opened_at, position.closed_at),
     }
 
 

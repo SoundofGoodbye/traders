@@ -47,3 +47,18 @@ class LLMGenerator:
                 raise ImportError(_MISSING_EXTRA) from e
             self._real = anthropic.Anthropic()
         return self._real
+
+
+def extract_tool_input(response: object) -> dict | None:
+    """Pull the first ``tool_use`` block's input dict out of a Messages response.
+
+    Shared by the thesis and post-mortem generators — both force a single
+    structured tool call, so this is the one place that parses model output at
+    the LLM trust boundary (audit D2).
+    """
+    for block in getattr(response, "content", None) or []:
+        if getattr(block, "type", None) == "tool_use":
+            data = getattr(block, "input", None)
+            if isinstance(data, dict):
+                return data
+    return None

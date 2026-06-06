@@ -15,9 +15,6 @@ hard-requires ``TRADERS_EDGAR_UA`` like the slice-10 EDGAR data source.
 
 from __future__ import annotations
 
-import json
-import os
-import urllib.request
 from datetime import date
 from typing import Any, Callable
 
@@ -133,33 +130,21 @@ def companyfacts_fetcher() -> Callable[[str], dict[str, Any]]:
     Returns ``{}`` for an unknown ticker or any fetch error. Shared by the periods
     ingestor and the capital-allocation analysis (slice 49).
     """
-    ua = os.environ.get("TRADERS_EDGAR_UA", "").strip()
-    if not ua:
-        raise RuntimeError(
-            "TRADERS_EDGAR_UA env var is required for the EDGAR fundamentals source. "
-            "Set it to a contact string like 'Your Name you@example.com'."
-        )
+    from traders import edgar_http
+
+    ua = edgar_http.require_ua()
     cik_map: dict[str, str] = {}
-
-    def _get_json(url: str) -> Any:
-        from traders.net import read_capped
-
-        req = urllib.request.Request(url, headers={"User-Agent": ua})
-        with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310 (vetted SEC URLs)
-            return json.loads(read_capped(resp).decode())
 
     def fetch(ticker: str) -> dict[str, Any]:
         if not cik_map:
-            payload = _get_json("https://www.sec.gov/files/company_tickers.json")
-            for entry in payload.values():
-                cik, sym = entry.get("cik_str"), entry.get("ticker")
-                if cik is not None and sym:
-                    cik_map[str(sym).upper()] = str(cik).zfill(10)
+            cik_map.update(edgar_http.load_cik_map(ua))
         cik = cik_map.get(ticker.upper())
         if cik is None:
             return {}
         try:
-            return _get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json")
+            return edgar_http.get_json(
+                f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json", ua, timeout=15
+            )
         except Exception:
             return {}
 

@@ -25,7 +25,7 @@ and the paper-only / human ``--apply`` gates downstream stay in force. See the
 
 from __future__ import annotations
 
-from traders.llm import LLMGenerator
+from traders.llm import LLMGenerator, extract_tool_input
 from traders.signals import DIRECTIONS, THESIS_TYPES, DraftThesis
 
 _MAX_TOKENS = 1024
@@ -78,16 +78,6 @@ _THESIS_TOOL = {
         ],
     },
 }
-
-
-def _extract_tool_input(response: object) -> dict | None:
-    """Pull the first ``tool_use`` block's input dict out of a Messages response."""
-    for block in getattr(response, "content", None) or []:
-        if getattr(block, "type", None) == "tool_use":
-            data = getattr(block, "input", None)
-            if isinstance(data, dict):
-                return data
-    return None
 
 
 def _to_drafts(data: dict) -> list[DraftThesis]:
@@ -171,7 +161,7 @@ class LLMThesisGenerator(LLMGenerator):
         except Exception:
             # Network / rate-limit / parse error: no thesis, never fatal.
             return []
-        data = _extract_tool_input(response)
+        data = extract_tool_input(response)
         if data is None:
             return []
         return _to_drafts(data)
