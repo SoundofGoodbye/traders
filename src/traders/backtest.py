@@ -46,7 +46,7 @@ from datetime import date, timedelta
 from traders.deflated_sharpe import deflated_sharpe_ratio
 from traders.metrics import ClosedTrade, Metrics, ScoreCard, metrics_from_trades, score
 from traders.parameters import LearnedParameters, load_parameters
-from traders.portfolio import OpenPosition, ThesisRow, evaluate
+from traders.portfolio import OpenPosition, ReportItem, ThesisRow, evaluate
 from traders.post_mortems import compute_pnl_pct
 from traders.prices import PriceHistory
 from traders.scout import filter_candidates, load_watchlist, rank_candidates
@@ -142,6 +142,60 @@ def _realize(sim: _SimPosition, history: PriceHistory, cost_bps: float = 0.0) ->
     )
 
 
+def _drafts_to_theses(
+    gen: ThesisGenerator, picks: list[str], start_id: int
+) -> tuple[list[ThesisRow], int]:
+    """Turn each pick's drafts into ``ThesisRow``s with sequential ids from
+    ``start_id``. Returns ``(theses, next_id)``."""
+    theses: list[ThesisRow] = []
+    next_id = start_id
+    for ticker in picks:
+        for draft in gen.generate(ticker, ""):
+            next_id += 1
+            theses.append(
+                ThesisRow(
+                    thesis_id=next_id,
+                    ticker=ticker,
+                    thesis_type=draft.thesis_type,
+                    direction=draft.direction,
+                    conviction=draft.conviction,
+                    suggested_size_pct=draft.suggested_size_pct,
+                )
+            )
+    return theses, next_id
+
+
+def _open_accepted(
+    accepted: list[ReportItem],
+    open_pos: dict[str, _SimPosition],
+    history: PriceHistory,
+    today: date,
+    *,
+    entry_lag_days: int,
+    holding_days: int,
+) -> int:
+    """Open each accepted pick at its as-of close, mutating ``open_pos``. Returns
+    the number skipped for want of a usable entry price."""
+    skipped = 0
+    for item in accepted:
+        entry_day = today + timedelta(days=entry_lag_days)
+        entry = history.close_asof(item.ticker, entry_day)
+        if entry is None:
+            skipped += 1
+            continue
+        open_pos[item.ticker] = _SimPosition(
+            ticker=item.ticker,
+            direction=item.direction,
+            thesis_type=item.thesis_type,
+            conviction=item.conviction,
+            size_pct=item.suggested_size_pct,
+            entry_day=entry_day,
+            entry_price=entry,
+            exit_day=entry_day + timedelta(days=holding_days),
+        )
+    return skipped
+
+
 def run_backtest(
     history: PriceHistory,
     *,
@@ -193,40 +247,19 @@ def run_backtest(
         else:
             picks = filter_candidates(wl, today, params.batch_size)
             gen = default_gen
-        theses: list[ThesisRow] = []
-        for ticker in picks:
-            for draft in gen.generate(ticker, ""):
-                next_thesis_id += 1
-                theses.append(
-                    ThesisRow(
-                        thesis_id=next_thesis_id,
-                        ticker=ticker,
-                        thesis_type=draft.thesis_type,
-                        direction=draft.direction,
-                        conviction=draft.conviction,
-                        suggested_size_pct=draft.suggested_size_pct,
-                    )
-                )
+        theses, next_thesis_id = _drafts_to_theses(gen, picks, next_thesis_id)
         held = [OpenPosition(ticker=sp.ticker, size_pct=sp.size_pct) for sp in open_pos.values()]
         accepted, _rejected = evaluate(theses, held, params.max_total_size_pct)
 
         # 3. Open each accepted pick at the as-of close.
-        for item in accepted:
-            entry_day = today + timedelta(days=entry_lag_days)
-            entry = history.close_asof(item.ticker, entry_day)
-            if entry is None:
-                skipped += 1
-                continue
-            open_pos[item.ticker] = _SimPosition(
-                ticker=item.ticker,
-                direction=item.direction,
-                thesis_type=item.thesis_type,
-                conviction=item.conviction,
-                size_pct=item.suggested_size_pct,
-                entry_day=entry_day,
-                entry_price=entry,
-                exit_day=entry_day + timedelta(days=holding_days),
-            )
+        skipped += _open_accepted(
+            accepted,
+            open_pos,
+            history,
+            today,
+            entry_lag_days=entry_lag_days,
+            holding_days=holding_days,
+        )
 
     # Realize anything still open at its scheduled exit.
     for ticker in list(open_pos):
