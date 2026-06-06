@@ -13,6 +13,7 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from traders.db import immediate
 from traders.parameters import LearnedParameters, load_parameters
 
 DEFAULT_MAX_TOTAL_SIZE_PCT = 20.0
@@ -216,18 +217,18 @@ def run(
         return DailyReport(pm_run_id=0, analyst_run_id=0, accepted=[], rejected=[])
     theses = _theses_for_run(conn, target)
     positions = _open_positions(conn)
-    pm_run_id = _next_run_id(conn)
     accepted, rejected = evaluate(theses, positions, cap)
     items = [*accepted, *rejected]
-    if items:
-        created_at = datetime.now(timezone.utc).isoformat()
-        conn.executemany(
-            "INSERT INTO pm_decisions"
-            " (pm_run_id, thesis_id, decision, reason, created_at)"
-            " VALUES (?, ?, ?, ?, ?)",
-            [(pm_run_id, i.thesis_id, i.decision, i.reason, created_at) for i in items],
-        )
-        conn.commit()
+    with immediate(conn):
+        pm_run_id = _next_run_id(conn)
+        if items:
+            created_at = datetime.now(timezone.utc).isoformat()
+            conn.executemany(
+                "INSERT INTO pm_decisions"
+                " (pm_run_id, thesis_id, decision, reason, created_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                [(pm_run_id, i.thesis_id, i.decision, i.reason, created_at) for i in items],
+            )
     return DailyReport(
         pm_run_id=pm_run_id,
         analyst_run_id=target,

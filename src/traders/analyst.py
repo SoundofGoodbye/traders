@@ -13,7 +13,14 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 
-from traders.signals import DIRECTIONS, THESIS_TYPES, StubThesisGenerator, ThesisGenerator
+from traders.db import immediate
+from traders.signals import (
+    DIRECTIONS,
+    THESIS_TYPES,
+    DraftThesis,
+    StubThesisGenerator,
+    ThesisGenerator,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,37 +79,41 @@ def run(
     if target is None:
         return 0, 0
     notes = _notes_for_run(conn, target)
-    run_id = _next_run_id(conn)
     if not notes:
-        return run_id, 0
+        return _next_run_id(conn), 0
     created_at = datetime.now(timezone.utc).isoformat()
-    rows: list[tuple] = []
+    # Generate drafts (the LLM generator does network I/O) before taking the write
+    # lock; allocate the run id and insert atomically (audit L4).
+    drafts: list[tuple[str, DraftThesis]] = []
     for ticker, content in notes:
         for draft in gen.generate(ticker, content):
             if not _is_valid_draft(draft):
                 logger.warning("Analyst: dropping out-of-contract draft for %s: %r", ticker, draft)
                 continue
-            rows.append(
-                (
-                    ticker,
-                    draft.thesis_type,
-                    draft.direction,
-                    draft.conviction,
-                    draft.suggested_size_pct,
-                    draft.exit_condition,
-                    draft.rationale,
-                    created_at,
-                    run_id,
-                    target,
-                )
+            drafts.append((ticker, draft))
+    with immediate(conn):
+        run_id = _next_run_id(conn)
+        rows = [
+            (
+                ticker,
+                draft.thesis_type,
+                draft.direction,
+                draft.conviction,
+                draft.suggested_size_pct,
+                draft.exit_condition,
+                draft.rationale,
+                created_at,
+                run_id,
+                target,
             )
-    if rows:
-        conn.executemany(
-            "INSERT INTO theses ("
-            "ticker, thesis_type, direction, conviction, suggested_size_pct,"
-            " exit_condition, rationale, created_at, run_id, research_run_id"
-            ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
-        )
-        conn.commit()
+            for ticker, draft in drafts
+        ]
+        if rows:
+            conn.executemany(
+                "INSERT INTO theses ("
+                "ticker, thesis_type, direction, conviction, suggested_size_pct,"
+                " exit_condition, rationale, created_at, run_id, research_run_id"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
     return run_id, len(rows)

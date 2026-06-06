@@ -15,6 +15,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from traders.data_sources import DataPoint, DataSource, StubDataSource
+from traders.db import immediate
 
 _KIND_ORDER = ("fundamentals", "filing", "news")
 
@@ -110,26 +111,20 @@ def run(
     if target is None:
         return 0, []
     tickers = _candidates_for_run(conn, target)
-    run_id = _next_run_id(conn)
     if not tickers:
-        return run_id, []
+        return _next_run_id(conn), []
+    # Fetch (network I/O) before taking the write lock, then allocate the run id
+    # and insert atomically (audit L4) so the lock is never held across I/O.
+    fetched = [(t, list(ds.fetch(t))) for t in tickers]
     created_at = datetime.now(timezone.utc).isoformat()
-    rows = []
-    for t in tickers:
-        points = list(ds.fetch(t))
-        rows.append(
-            (
-                t,
-                run_id,
-                render_content(t, points),
-                render_sources(points),
-                created_at,
-            )
+    with immediate(conn):
+        run_id = _next_run_id(conn)
+        conn.executemany(
+            "INSERT INTO research_notes (ticker, run_id, content, sources, created_at)"
+            " VALUES (?, ?, ?, ?, ?)",
+            [
+                (t, run_id, render_content(t, points), render_sources(points), created_at)
+                for t, points in fetched
+            ],
         )
-    conn.executemany(
-        "INSERT INTO research_notes (ticker, run_id, content, sources, created_at)"
-        " VALUES (?, ?, ?, ?, ?)",
-        rows,
-    )
-    conn.commit()
     return run_id, tickers

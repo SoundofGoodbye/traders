@@ -13,6 +13,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from traders.db import immediate
 from traders.parameters import LearnedParameters, load_parameters
 from traders.prices import PriceHistory
 from traders.signals_lib import (
@@ -138,11 +139,11 @@ def run(
     else:
         picks = filter_candidates(watchlist, rd, bs)
         reason = f"rotation window for {rd.isoformat()}"
-    run_id = _next_run_id(conn)
     created_at = datetime.now(timezone.utc).isoformat()
-    conn.executemany(
-        "INSERT INTO candidates (ticker, scout_run_id, reason, created_at) VALUES (?, ?, ?, ?)",
-        [(t, run_id, reason, created_at) for t in picks],
-    )
-    conn.commit()
+    with immediate(conn):
+        run_id = _next_run_id(conn)
+        conn.executemany(
+            "INSERT INTO candidates (ticker, scout_run_id, reason, created_at) VALUES (?, ?, ?, ?)",
+            [(t, run_id, reason, created_at) for t in picks],
+        )
     return run_id, picks
