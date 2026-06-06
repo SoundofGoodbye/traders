@@ -22,7 +22,7 @@ Conventions for Claude Code sessions in this repo.
 - Agents are sequential Python modules invoked from the daily orchestrator (`traders.orchestrator`, shipped in slice 8; `run-daily` / `run-weekly` CLI). Not multi-process, not async.
 - Each agent reads from and writes to the SQLite db; there's no in-memory pipeline.
 - Order: Scout → Researcher → Analyst → Portfolio Manager. Reviewer runs weekly, separately.
-- The web UI (`src/traders/web/`) is a separate read/write surface over the same db: it reads agent output through `traders.web.queries` and writes only via the existing `traders.feedback` functions — never a parallel write path.
+- The web UI (`src/traders/web/`) is a separate read/write surface over the same db: it reads agent output through `traders.web.queries` and writes only through `traders.feedback` (agent tables) and the dedicated user-data modules `traders.buylist` / `traders.jobs` — never a parallel write path into the agent tables (`positions` / `theses`).
 
 ## Hard rules
 

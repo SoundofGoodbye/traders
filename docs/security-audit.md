@@ -320,5 +320,44 @@ pathological HTML returns fast, missing-data run logs a warning).
 
 ---
 
+## 7. Remediation status (2026-06-06, branch `security-hardening`)
+
+Worked test-first, one commit per slice; full suite green throughout.
+
+**Fixed**
+
+- **H1** — price/size validated at the `feedback` write boundary and the Analyst
+  insert; `compute_pnl_pct` rejects non-positive entry.
+- **H2** — linear `<script>/<style>` stripper; every HTTP response byte-capped.
+- **M1** — source title/snippet/date neutralized in `render_content`.
+- **M2** — `DataSource` swallow paths log; `run_daily` warns on zero-output stages.
+- **M3** *(partial)* — the one-open-position-per-thesis **partial unique index**
+  landed (migration 010). The value-bound **CHECK constraints are deferred** (see
+  below); the bounds are enforced in Python at every write boundary (H1) meanwhile.
+- **M4** — `apply_migrations` is now atomic (DDL + version row in one transaction).
+- **L1** Stooq symbol quoted · **L2** Tiingo key → `Authorization` header ·
+  **L3** `record_skip` rejects an open position · **L5** web security headers/CSP ·
+  **L6** `parse_sources` drops dangerous URL schemes · **L7** ticker validation.
+- **D2** LLM tool-parser de-duplicated · **D3** `edgar_http` extracted ·
+  **D4** this doc + CLAUDE.md web-write contract corrected · **D5** `holding_days`
+  made public.
+
+**Deferred (deliberate, with rationale)**
+
+- **D1 — `cli.py` god-file split.** A 1410-line decomposition is its own reviewed
+  slice, not something to land blind inside a hardening batch. Unchanged.
+- **D6 — `run_backtest` extraction.** The audit rated it a watch-item, not a defect;
+  re-shaping a money-simulation loop unsupervised is poor risk/reward. Unchanged.
+- **L4 — run-id `SELECT MAX` race.** Theoretical under the single-process
+  orchestrator; the M3 index already closes the impactful (double-open) race.
+  Accepted risk; revisit if concurrency is ever introduced.
+- **M3 DB-level CHECK constraints.** Adding `CHECK (size_pct/price/status)` to the
+  existing `positions`/`theses` tables requires a full SQLite table rebuild, which
+  is risky to run blind against a live position history. Enforced in Python (H1) for
+  now; the rebuild belongs in a supervised migration. **Back up `data/traders.db`
+  before applying migration 010.**
+
+---
+
 *End of audit. This document is a point-in-time assessment of commit `34337a8`; update
 or re-run when the trust assumptions in the preamble change.*
