@@ -55,6 +55,42 @@ def test_reentry_after_close_is_allowed(tmp_path):
     conn.close()
 
 
+def test_value_check_constraints_reject_bad_positions(tmp_path):
+    # Migration 011 makes the Python size/price/status invariants a schema invariant.
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn, MIGRATIONS)
+    tid = _seed_open_thesis(conn)
+    bad = [
+        ("'bogus'", "100.0", "2.0"),  # status not in (open, closed)
+        ("'open'", "100.0", "0"),  # size_pct must be > 0
+        ("'open'", "100.0", "150"),  # size_pct must be <= 100
+        ("'open'", "-1.0", "2.0"),  # entry_price must be > 0
+    ]
+    for status, price, size in bad:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO positions (ticker, thesis_id, opened_at, entry_price, size_pct, status)"
+                f" VALUES ('A', {tid}, '2026-01-01', {price}, {size}, {status})"
+            )
+        conn.rollback()
+    conn.close()
+
+
+def test_value_check_constraints_reject_bad_theses(tmp_path):
+    conn = connect(tmp_path / "t.db")
+    apply_migrations(conn, MIGRATIONS)
+    for conviction, size in [(0, 2.0), (6, 2.0), (3, 0), (3, 150)]:
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO theses (ticker, thesis_type, direction, conviction,"
+                " suggested_size_pct, created_at, status)"
+                " VALUES ('A', 'value', 'long', ?, ?, '2026-01-01', 'open')",
+                (conviction, size),
+            )
+        conn.rollback()
+    conn.close()
+
+
 def test_failed_migration_is_atomic(tmp_path):
     """A migration that fails partway leaves no half-applied schema and no
     recorded version (audit M4)."""
